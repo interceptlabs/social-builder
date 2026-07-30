@@ -34,9 +34,15 @@
     if (spec.bg) params.set('ground', spec.bg);                 // 'halo' | 'carbon'
     if (spec.theme) params.set('theme', spec.theme);            // 'dark'
     if (slots.lockupInk) params.set('lockupInk', slots.lockupInk);
-    // Content JSON — strip nothing; the injector ignores unknown keys (warns only). This carries
-    // quote/name/role/etc + optional colors/sizeScales, exactly like the server's --content.
-    params.set('content', JSON.stringify(slots));
+    // Content JSON — carries quote/name/role/etc + optional colors/sizeScales, like the server's
+    // --content. A DATA-URL photo is STRIPPED here: a base64 image makes this query megabytes long and
+    // the plate fetch dies with "Failed to fetch". The renderer draws the real photo into the plate's
+    // photo box directly (see renderPlates -> drawPhoto override). A short photo PATH stays in.
+    var contentSlots = slots;
+    if (typeof slots.photo === 'string' && slots.photo.slice(0, 5) === 'data:') {
+      contentSlots = Object.assign({}, slots); delete contentSlots.photo;
+    }
+    params.set('content', JSON.stringify(contentSlots));
     return 'templates/' + templateName + '/plates.html?' + params.toString();
   }
 
@@ -63,6 +69,9 @@
       html = injectBase(html, baseHref);
       // Replace location.search reads with the real query (JSON.stringify escapes it safely).
       html = html.split('location.search').join(JSON.stringify('?' + queryStr));
+      // NOTE: a data-URL photo is stripped from the query (platesUrl) to keep the fetch small; the
+      // renderer draws it directly into the plate's photo box (renderPlates passes it to drawPhoto),
+      // using the placeholder <img>'s geometry.
 
       return new Promise(function (resolve, reject) {
         var iframe = document.createElement('iframe');
@@ -246,36 +255,53 @@
   // background-image is the (already matted) portrait. Both are same-origin -> origin-clean. We honor
   // object-fit (cover/contain) and any border-radius clip. An <img> already decoded in the iframe is
   // drawn directly (no re-fetch); a background-image URL is loaded fresh.
-  function drawPhoto(ctx, win, el) {
+  function drawPhoto(ctx, win, el, overrideSrc) {
     var cs = win.getComputedStyle(el);
-    var rect = el.getBoundingClientRect();
     var radius = parseFloat(cs.borderTopLeftRadius) || 0;
     var fit = cs.objectFit || 'cover';
 
-    function paint(media, mw, mh) {
-      if (!mw || !mh) return;
-      ctx.save();
-      roundedClip(ctx, rect, radius);
-      if (fit === 'contain') containDraw(ctx, media, rect, mw, mh);
-      else coverDraw(ctx, media, rect, mw, mh);
-      ctx.restore();
+    // Draw a FRESH image (whose load we control) into the plate. The rect is read at draw time —
+    // critical because the photo box is often `width:auto; height:<fixed>` (e.g. new-hire .hero), so
+    // its width is 0 until its own <img> has loaded. We first wait for the iframe's <img> to be ready
+    // (correct geometry), then load a fresh copy of the same src and paint on ITS load — decoupling the
+    // draw from the iframe element's flaky complete/naturalWidth timing.
+    function paintSrc(src) {
+      if (!src) return Promise.resolve();
+      return new Promise(function (resolve) {
+        var img = new Image();
+        img.onload = function () {
+          var rect = el.getBoundingClientRect();
+          if (img.naturalWidth && rect.width >= 1 && rect.height >= 1) {
+            ctx.save();
+            roundedClip(ctx, rect, radius);
+            if (fit === 'contain') containDraw(ctx, img, rect, img.naturalWidth, img.naturalHeight);
+            else coverDraw(ctx, img, rect, img.naturalWidth, img.naturalHeight);
+            ctx.restore();
+          }
+          resolve();
+        };
+        img.onerror = function () { resolve(); };
+        img.src = src;
+      });
+    }
+
+    function elReady() {
+      if (el.tagName !== 'IMG') return Promise.resolve();
+      if (el.complete && el.naturalWidth) return Promise.resolve();
+      return new Promise(function (res) {
+        el.addEventListener('load', res, { once: true });
+        el.addEventListener('error', res, { once: true });
+        setTimeout(res, 5000);
+      });
     }
 
     if (el.tagName === 'IMG') {
-      if (el.complete && el.naturalWidth) { paint(el, el.naturalWidth, el.naturalHeight); return Promise.resolve(); }
-      return new Promise(function (resolve) {
-        el.addEventListener('load', function () { paint(el, el.naturalWidth, el.naturalHeight); resolve(); }, { once: true });
-        el.addEventListener('error', function () { resolve(); }, { once: true });
-      });
+      // Wait for the placeholder <img> to load (correct width:auto geometry), then paint the real photo
+      // — the uploaded data URL when provided, else the element's own src.
+      return elReady().then(function () { return paintSrc(overrideSrc || el.currentSrc || el.src); });
     }
     var m = (cs.backgroundImage || '').match(/url\(["']?(.*?)["']?\)/);
-    if (!m) return Promise.resolve();
-    return new Promise(function (resolve) {
-      var img = new Image();
-      img.onload = function () { paint(img, img.naturalWidth, img.naturalHeight); resolve(); };
-      img.onerror = function () { resolve(); };
-      img.src = m[1];
-    });
+    return m ? paintSrc(overrideSrc || m[1]) : Promise.resolve();
   }
 
   function roundedClip(ctx, rect, r) {
@@ -338,8 +364,11 @@
         var ctx = canvas.getContext('2d');
         var kind = classifies(el);
         if (kind === 'lockup') jobs.push(drawLockup(ctx, win, el, doc));
-        else if (kind === 'photo') jobs.push(drawPhoto(ctx, win, el));
-        else { drawTextElement(ctx, win, el); }
+        else if (kind === 'photo') {
+          var ps = (spec.slots || {}).photo;
+          var ov = (typeof ps === 'string' && ps.slice(0, 5) === 'data:') ? ps : null;
+          jobs.push(drawPhoto(ctx, win, el, ov));
+        } else { drawTextElement(ctx, win, el); }
       });
       return Promise.all(jobs).then(function () {
         if (frame.iframe && frame.iframe.parentNode) frame.iframe.parentNode.removeChild(frame.iframe);
