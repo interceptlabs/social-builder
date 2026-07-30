@@ -42,7 +42,15 @@
     if (typeof slots.photo === 'string' && slots.photo.slice(0, 5) === 'data:') {
       contentSlots = Object.assign({}, slots); delete contentSlots.photo;
     }
-    params.set('content', JSON.stringify(contentSlots));
+    // Pre-encode the JSON before handing it to URLSearchParams — the shared plates.html injector reads
+    // `?content=` and runs `decodeURIComponent(URLSearchParams.get('content'))`, i.e. it expects the
+    // value to survive ONE URL-decode still encoded (matching the server orchestrator's
+    // `content=${encodeURIComponent(JSON.stringify(...))}`). Setting the raw JSON here would decode
+    // fully on the injector's read, and its extra decodeURIComponent would then throw `URI malformed`
+    // on any literal '%' in the content (e.g. Stat's "87%" metric) — the injector swallows that, bails
+    // before wiring runFit/__slotFitReport, and the plate transcribes blank. Encoding here keeps the
+    // decode symmetric for all content (and plates.html stays byte-identical to the server copy).
+    params.set('content', encodeURIComponent(JSON.stringify(contentSlots)));
     return 'templates/' + templateName + '/plates.html?' + params.toString();
   }
 
