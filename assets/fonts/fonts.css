@@ -1,0 +1,84 @@
+/* Local font source (BLDR-03) — the exact Google-served woff2 files, fetched once while online
+ * from Google's own css2 endpoint (same source templates/{new-hire,carousel}/plates.html
+ * previously loaded via the Google Fonts CDN), then embedded here with zero further network
+ * dependency.
+ *
+ * Discovery worth recording: Google's css2 API serves a DIFFERENT physical woff2 for the same
+ * nominal weight depending on how many weights are requested together. Requesting Instrument Sans
+ * 500;600;700 in one call (New Hire's original CDN URL) returns ONE shared variable-range file
+ * used for all three weights; requesting weight 700 ALONE (Carousel's original CDN URL) returns a
+ * different, smaller, single-instance static file. The two are NOT byte-identical. To keep both
+ * templates' captures byte-for-byte reproducible, this file declares the shared/combined source
+ * (used generally, and by New Hire's inlined @font-face); Carousel's plates.html inlines its own
+ * @font-face pointing at instrument-sans-700-solo.woff2 (the exact bytes its original CDN request
+ * resolved to) rather than reusing this shared file for that one weight. Both files are checked in
+ * side by side here so a single local assets/fonts/ directory remains the complete source of truth
+ * for every face in use across the builder (this file) and the plate templates (inlined).
+ */
+
+@font-face {
+  font-family: 'Instrument Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./instrument-sans-500-600-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Instrument Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./instrument-sans-500-600-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Instrument Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./instrument-sans-500-600-700.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./inter-400-500-600-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./inter-400-500-600-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./inter-400-500-600-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./inter-400-500-600-700.woff2') format('woff2');
+}
+
+/* Builder UI chrome (07-03) — Geist Mono, no byte-identity constraint. */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./geist-mono-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./geist-mono-500.woff2') format('woff2');
+}

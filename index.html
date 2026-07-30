@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Intercept Social Builder — Static</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app">
+  <aside id="panel">
+    <header id="brand">
+      <div class="brand-mark" aria-hidden="true"></div>
+      <div>
+        <div class="brand-title">Social Builder</div>
+        <div class="brand-sub">Static · in-browser render + MP4</div>
+      </div>
+    </header>
+
+    <section class="group">
+      <h2>Template</h2>
+      <div id="template-picker" class="chips"></div>
+    </section>
+
+    <section class="group">
+      <h2>Format</h2>
+      <div id="ratio-picker" class="chips" role="radiogroup" aria-label="Aspect ratio"></div>
+    </section>
+
+    <section class="group" id="ground-group">
+      <h2>Ground</h2>
+      <div id="ground-picker" class="chips"></div>
+    </section>
+
+    <section class="group">
+      <h2>Logo</h2>
+      <div id="logo-picker" class="chips"></div>
+    </section>
+
+    <section class="group">
+      <h2>Motion</h2>
+      <div id="style-picker" class="chips"></div>
+      <div id="preset-picker" class="chips subtle"></div>
+    </section>
+
+    <section class="group">
+      <h2>Background</h2>
+      <div id="bg-picker" class="chips"></div>
+      <input type="file" id="bg-image-file" accept="image/*" class="hidden">
+      <div id="bg-opacity-wrap" class="slider-row hidden">
+        <label for="bg-opacity">Loop opacity</label>
+        <input type="range" id="bg-opacity" min="0.1" max="0.7" step="0.02" value="0.32">
+        <output id="bg-opacity-val">0.32</output>
+      </div>
+      <div id="bg-image-controls" class="hidden">
+        <div id="bg-image-fit" class="chips subtle"></div>
+        <div id="bg-image-ink" class="chips subtle"></div>
+      </div>
+    </section>
+
+    <section class="group">
+      <h2>Content</h2>
+      <div id="content-fields"></div>
+    </section>
+
+    <section class="group export">
+      <h2>Export</h2>
+      <div class="export-row">
+        <button id="export-mp4" class="btn primary">Export MP4</button>
+        <button id="export-poster" class="btn">Poster PNG</button>
+      </div>
+      <div id="export-status" class="status"></div>
+      <progress id="export-progress" class="hidden" max="1" value="0"></progress>
+    </section>
+
+    <footer id="foot">Self-contained · no server · WebCodecs H.264</footer>
+  </aside>
+
+  <main id="stage">
+    <div id="stage-inner">
+      <div id="preview-wrap">
+        <img id="bg-image" class="hidden" alt="">
+        <video id="bg-video" muted loop playsinline preload="auto" class="hidden"></video>
+        <canvas id="preview-canvas" width="1080" height="1080"></canvas>
+      </div>
+      <div id="stage-meta"><span id="meta-dims"></span><span id="meta-note"></span></div>
+    </div>
+    <div id="boot-msg">Loading…</div>
+  </main>
+</div>
+
+<!-- reusable browser-ready core (verbatim from the server build) -->
+<script src="core/ratios.js"></script>
+<script src="core/engine.js"></script>
+<script src="core/motion-presets.js"></script>
+<script src="core/fritzoid.js"></script>
+<script src="core/composer.js"></script>
+<!-- vendored WebCodecs -> mp4 muxer (global Mp4Muxer) -->
+<script src="vendor/mp4-muxer.min.js"></script>
+<!-- static-app new modules -->
+<script src="core/plate-renderer.js"></script>
+<script src="core/export-webcodecs.js"></script>
+<script src="core/matting.js"></script>
+<script src="core/templates.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

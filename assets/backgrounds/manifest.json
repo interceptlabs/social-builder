@@ -1,0 +1,11 @@
+{
+  "loops": [
+    { "id": "shoal-drift",   "label": "Shoal Drift",   "family": "organic",   "mood": "energetic", "defaultOpacity": 0.32 },
+    { "id": "drift-current", "label": "Drift Current", "family": "organic",   "mood": "bold",      "defaultOpacity": 0.32 },
+    { "id": "tide-lobes",    "label": "Tide Lobes",    "family": "organic",   "mood": "calm",      "defaultOpacity": 0.32 },
+    { "id": "contour-step",  "label": "Contour Step",  "family": "metaball",  "mood": "premium",   "defaultOpacity": 0.42 },
+    { "id": "wire-sweep",    "label": "Wire Sweep",    "family": "wireframe", "mood": "premium",   "defaultOpacity": 0.42 }
+  ],
+  "base": "#0a0a0f",
+  "note": "Muted Frotion loops used as template backgrounds; opacity applied over base at export."
+}
