@@ -270,8 +270,8 @@
       return new Promise(function (resolve) {
         var img = new Image();
         img.onload = function () {
-          var rect = el.getBoundingClientRect();
-          if (img.naturalWidth && rect.width >= 1 && rect.height >= 1) {
+          var rect = photoRect(img);
+          if (img.naturalWidth && rect && rect.width >= 1 && rect.height >= 1) {
             ctx.save();
             roundedClip(ctx, rect, radius);
             if (fit === 'contain') containDraw(ctx, img, rect, img.naturalWidth, img.naturalHeight);
@@ -283,6 +283,22 @@
         img.onerror = function () { resolve(); };
         img.src = src;
       });
+    }
+
+    // The photo box's live rect, or a fallback computed from the CSS box + the drawn image's aspect
+    // when getBoundingClientRect reads 0 (absolute-positioned width:auto boxes do until their own <img>
+    // loads — which is flaky in a srcdoc doc). Handles left/right/top/bottom anchoring.
+    function photoRect(img) {
+      var r = el.getBoundingClientRect();
+      if (r.width >= 1 && r.height >= 1) return r;
+      var doc = el.ownerDocument, root = doc.documentElement;
+      var W = root.clientWidth || win.innerWidth, H = root.clientHeight || win.innerHeight;
+      var h = parseFloat(cs.height) || 0, w = parseFloat(cs.width);
+      if (!(w >= 1) && img.naturalHeight) w = h * (img.naturalWidth / img.naturalHeight);
+      var cl = parseFloat(cs.left), cr = parseFloat(cs.right), ct = parseFloat(cs.top), cb = parseFloat(cs.bottom);
+      var left = isFinite(cl) ? cl : (isFinite(cr) ? (W - cr - w) : 0);
+      var top = isFinite(ct) ? ct : (isFinite(cb) ? (H - cb - h) : 0);
+      return { left: left, top: top, width: w, height: h };
     }
 
     function elReady() {
