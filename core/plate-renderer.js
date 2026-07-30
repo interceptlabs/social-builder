@@ -93,6 +93,8 @@
           fontsReady.then(function () {
             return settleFit(win);
           }).then(function () {
+            return whenImagesReady(doc);
+          }).then(function () {
             if (!settled) { settled = true; resolve({ iframe: iframe, win: win, doc: doc }); }
           }).catch(fail);
         };
@@ -124,6 +126,21 @@
         setTimeout(poll, 40);
       })();
     });
+  }
+
+  // Wait for every <img> in the plate to finish loading (photo, lockup fallbacks) before rasterizing —
+  // on a cold network load they aren't decoded yet, so measuring/drawing early yields blank images.
+  function whenImagesReady(doc) {
+    var imgs = Array.prototype.slice.call(doc.querySelectorAll('img'));
+    var pending = imgs.filter(function (im) { return !(im.complete && im.naturalWidth); });
+    if (!pending.length) return Promise.resolve();
+    return Promise.all(pending.map(function (im) {
+      return new Promise(function (res) {
+        im.addEventListener('load', res, { once: true });
+        im.addEventListener('error', res, { once: true });
+        setTimeout(res, 4000);
+      });
+    }));
   }
 
   // ---- text transcription ---------------------------------------------------------------------
@@ -364,11 +381,28 @@
     return 'text';
   }
 
+  // Force-load the plate fonts into the MAIN document before rasterizing — drawTextElement draws onto
+  // a main-doc canvas with ctx.font='… Instrument Sans'/'… Inter'/'… Geist Mono', and @font-face fonts
+  // load lazily, so on a cold network load the first renders would otherwise fall back and some text
+  // would vanish. Cached after the first call.
+  var _fontsP = null;
+  function ensureFonts() {
+    if (_fontsP) return _fontsP;
+    if (!document.fonts || !document.fonts.load) return (_fontsP = Promise.resolve());
+    var specs = [];
+    ['Instrument Sans', 'Inter', 'Geist Mono'].forEach(function (fam) {
+      ['400', '500', '600', '700'].forEach(function (w) { specs.push(w + ' 40px "' + fam + '"'); });
+    });
+    _fontsP = Promise.all(specs.map(function (s) { try { return document.fonts.load(s).catch(function () {}); } catch (e) { return Promise.resolve(); } }))
+      .then(function () { return document.fonts.ready; }).catch(function () {});
+    return _fontsP;
+  }
+
   // Public: renderPlates(templateName, spec) -> Promise<{ name -> canvas }>
   function renderPlates(templateName, spec) {
     var W = spec.size.w, H = spec.size.h;
     var names = (spec.layers || []).map(function (l) { return l.name; });
-    return openFrame(templateName, spec).then(function (frame) {
+    return ensureFonts().then(function () { return openFrame(templateName, spec); }).then(function (frame) {
       var doc = frame.doc, win = frame.win;
       var jobs = [];
       var images = {};
