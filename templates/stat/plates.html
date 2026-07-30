@@ -139,12 +139,16 @@
   <div class="content">
     <div class="lockup" data-plate="lockup"><svg><use href="#intercept-lockup-centered"/></svg></div>
     <div class="stat-hero">
-      <div class="stat-frame" data-plate="frame-1"><span class="stat-line"><span class="stat-num">15</span><span class="stat-affix stat-suffix">%</span></span></div>
-      <div class="stat-frame" data-plate="frame-2"><span class="stat-line"><span class="stat-num">29</span><span class="stat-affix stat-suffix">%</span></span></div>
-      <div class="stat-frame" data-plate="frame-3"><span class="stat-line"><span class="stat-num">44</span><span class="stat-affix stat-suffix">%</span></span></div>
-      <div class="stat-frame" data-plate="frame-4"><span class="stat-line"><span class="stat-num">58</span><span class="stat-affix stat-suffix">%</span></span></div>
-      <div class="stat-frame" data-plate="frame-5"><span class="stat-line"><span class="stat-num">73</span><span class="stat-affix stat-suffix">%</span></span></div>
-      <div class="stat-frame" data-plate="frame-6"><span class="stat-line"><span class="stat-num">87</span><span class="stat-affix stat-suffix">%</span></span></div>
+      <div class="stat-frame" data-plate="frame-1"><span class="stat-line"><span class="stat-num">9</span><span class="stat-affix stat-suffix">%</span></span></div>
+      <div class="stat-frame" data-plate="frame-2"><span class="stat-line"><span class="stat-num">17</span><span class="stat-affix stat-suffix">%</span></span></div>
+      <div class="stat-frame" data-plate="frame-3"><span class="stat-line"><span class="stat-num">26</span><span class="stat-affix stat-suffix">%</span></span></div>
+      <div class="stat-frame" data-plate="frame-4"><span class="stat-line"><span class="stat-num">35</span><span class="stat-affix stat-suffix">%</span></span></div>
+      <div class="stat-frame" data-plate="frame-5"><span class="stat-line"><span class="stat-num">44</span><span class="stat-affix stat-suffix">%</span></span></div>
+      <div class="stat-frame" data-plate="frame-6"><span class="stat-line"><span class="stat-num">52</span><span class="stat-affix stat-suffix">%</span></span></div>
+      <div class="stat-frame" data-plate="frame-7"><span class="stat-line"><span class="stat-num">61</span><span class="stat-affix stat-suffix">%</span></span></div>
+      <div class="stat-frame" data-plate="frame-8"><span class="stat-line"><span class="stat-num">70</span><span class="stat-affix stat-suffix">%</span></span></div>
+      <div class="stat-frame" data-plate="frame-9"><span class="stat-line"><span class="stat-num">78</span><span class="stat-affix stat-suffix">%</span></span></div>
+      <div class="stat-frame" data-plate="frame-10"><span class="stat-line"><span class="stat-num">87</span><span class="stat-affix stat-suffix">%</span></span></div>
     </div>
     <div class="support-block">
       <p class="support" data-plate="support">of campaigns launched on schedule</p>
@@ -161,7 +165,7 @@
   // fills the support line via textContent, then runs an overflow-fit pass exposing
   // window.__slotFitReport. COUNT_UP_FRAMES MUST match src/templates/stat.cjs's constant.
   (function () {
-    var COUNT_UP_FRAMES = 6;
+    var COUNT_UP_FRAMES = 10;
 
     // ---- parseMetric / countUpFrames — kept in lockstep with src/templates/stat.cjs ----
     function parseMetric(metric) {

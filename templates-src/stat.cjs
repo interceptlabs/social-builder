@@ -18,8 +18,10 @@
  * The count-up: expand() emits one PRESENT, STATIC layer per value frame (frame-1..frame-N, where
  * frame-N is the FINAL/exact metric), plus a support layer and a lockup layer. spec.odometer.layers
  * lists frame-N FIRST (member 0 = the rest/poster figure, held across the seam) then the ascending
- * count-up frames frame-1..frame-(N-1) in order (member k centered at c=k/N), so the loop interior
- * visibly counts UP and settles back on the final figure at the seam.
+ * count-up frames frame-1..frame-(N-1) in order, so the loop interior visibly counts UP and settles
+ * back on the final figure at the seam. `spec.odometer.rollSpan` sets HOW FAST: the roll is packed
+ * into the last `rollSpan` of the loop (member k centered at c = 1 - (N-k)*rollSpan/N), so the figure
+ * rests on its final value for the rest of the loop instead of crawling through it.
  *
  * Slot -> layer mapping (stable contract for Phase 5 content wiring + Phase 7 builder fields):
  *   metric  -> layers frame-1 .. frame-N (one PRESENT, STATIC layer per count-up value; frame-N is
@@ -50,17 +52,32 @@ const VALID_STYLES = ['keyline', 'fritzoid'];
 const VALID_PRESETS = ['subtle', 'standard', 'bold'];
 const VALID_GROUNDS = ['halo', 'carbon'];
 
-// Number of count-up value frames (Claude's discretion, this plan's feel — tunable; Jon judges at
-// Phase 13). K=6 gives a readable roll (final/6, 2·final/6, ... final) that settles on the exact
-// figure. MUST stay in lockstep with templates/stat/plates.html's COUNT_UP_FRAMES so the per-frame
-// data-plate COUNT matches the odometer member count (capture isolates one plate per frame).
-const COUNT_UP_FRAMES = 6;
+// Number of count-up value frames. K=10 gives a DENSE ramp (final/10, 2·final/10, ... final) that
+// reads as a mechanical odometer rather than a slideshow of a few numbers — Jon's 2026-07-30 note on
+// the v1.1 roll ("doesn't roll fast enough to be cool") is a speed AND granularity call: 6 coarse
+// steps spread over the whole loop crawled. MUST stay in lockstep with templates/stat/plates.html's
+// COUNT_UP_FRAMES so the per-frame data-plate COUNT matches the odometer member count (capture
+// isolates one plate per frame).
+const COUNT_UP_FRAMES = 10;
 
-// Odometer timing (Claude's discretion — tunable feel). Each frame's dwell/fade are a fixed fraction
-// of its OWN 1/N loop-slot, exactly like carousel's beatCycle, so 12-01's one-at-a-time +
-// final-alone-at-frame-0 invariant `2*dwell + fade <= 1/N` holds automatically for ANY N with
-// headroom (2*0.36 + 0.24 = 0.96 <= 1 of the slot). At N=6 this resolves to dwell=0.06, fade=0.04 —
-// a readable digit hold with a quick raised-cosine flip between values.
+// ROLL SPEED — the fraction of the loop the count-up occupies (spec.odometer.rollSpan). The number
+// holds on the final figure for (1 - ROLL_SPAN) of the loop, then rolls through all N values and
+// lands back on the final figure at the seam. 0.2 of an 8s loop = a 1.6s roll, i.e. ~0.16s per value
+// at N=10 (~5 frames at 30fps) — snappy enough to read as a real odometer, slow enough that each
+// value registers. 1 would restore the original whole-loop crawl.
+//
+// SAMPLING FLOOR: each value gets fps*loopSec*rollSpan/N frames, so pushing rollSpan much below ~0.12
+// (at 30fps/8s/N=10) drops under ~3 frames per value and the roll degrades into a blur where some
+// values never land on a sampled frame. The loop/poster/seam invariants still hold — it just stops
+// reading as a count-up. The builder's roll-speed slider clamps against exactly this bound.
+const ROLL_SPAN = 0.2;
+
+// Odometer timing (tunable feel). Each frame's dwell/fade are a fixed fraction of its OWN loop-slot —
+// which is now `ROLL_SPAN/N`, not 1/N, since the roll is compressed — exactly like carousel's
+// beatCycle, so 12-01's one-at-a-time + final-alone-at-frame-0 invariant `2*dwell + fade <=
+// rollSpan/N` holds automatically for ANY N and ANY span with headroom (2*0.36 + 0.24 = 0.96 <= 1 of
+// the slot). At N=10, rollSpan=0.2 this resolves to dwell=0.0072, fade=0.0048 — a crisp digit hold
+// with a quick raised-cosine flip between values.
 const DWELL_OF_SLOT = 0.36;
 const FADE_OF_SLOT = 0.24;
 
@@ -158,16 +175,19 @@ function expand(slots, opts) {
   // c=0 -> held ALONE at the frame-0 poster + the seam), then the ascending count-up frames
   // frame-1..frame-(N-1) in order (member k centered at c=k/N). dwell/fade are a fixed fraction of
   // each frame's 1/N slot, so 2*dwell+fade <= 1/N holds for any N.
-  // odometer dwell/fade are settable per-post (Phase 14): each falls back to the fixed fraction-of-slot
-  // default (=> byte-identical when unset). composition-spec.js enforces 2*dwell + fade <= 1/N on the
-  // resolved values, so an out-of-range override is REJECTED rather than silently breaking the seam.
+  // odometer dwell/fade/rollSpan are settable per-post (Phase 14 + the 07-30 roll-speed knob): each
+  // falls back to the fixed default (dwell/fade a fraction of the COMPRESSED slot rollSpan/N).
+  // composition-spec.js enforces 2*dwell + fade <= rollSpan/N on the resolved values, so an
+  // out-of-range override is REJECTED rather than silently breaking the seam.
   let odometer;
   if (rollable) {
-    const dwell = opts.dwell != null ? round4(Number(opts.dwell)) : round4(DWELL_OF_SLOT / N);
-    const fade = opts.fade != null ? round4(Number(opts.fade)) : round4(FADE_OF_SLOT / N);
+    const rollSpan = opts.rollSpan != null ? round4(Number(opts.rollSpan)) : ROLL_SPAN;
+    const slot = rollSpan / N; // this member's share of the loop — the invariant's bound
+    const dwell = opts.dwell != null ? round4(Number(opts.dwell)) : round4(DWELL_OF_SLOT * slot);
+    const fade = opts.fade != null ? round4(Number(opts.fade)) : round4(FADE_OF_SLOT * slot);
     const odLayers = [`frame-${N}`];
     for (let i = 1; i <= N - 1; i++) odLayers.push(`frame-${i}`);
-    odometer = { layers: odLayers, dwell, fade };
+    odometer = { layers: odLayers, dwell, fade, rollSpan };
   }
 
   // keyline: emit engine:'keyline' + style + preset (DEFAULT_MOTION/preset resolution fills the

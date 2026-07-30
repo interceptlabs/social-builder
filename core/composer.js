@@ -266,12 +266,27 @@
   // every non-member layer is entirely unaffected (see scripts/verify-legacy-regression.cjs). Pure
   // function of tN only (same house rule as beatCycleAlpha / floatTransform: NEVER a constant phase
   // term — that would break the seam). ORDER is load-bearing: member 0 is the REST / FINAL figure
-  // (center c=0), members 1..N-1 are the ascending count-up frames (member k centered at c=k/N). At
-  // tN=0, member 0 has |d|=0 -> alpha=1; every roll member (k>=1) has cyclic distance >= 1/N, and
-  // composition-spec.js's validated invariant (2*dwell+fade <= 1/N) guarantees 1/N >= dwell+fade, so
-  // those are already fully faded (alpha=0) — frame 0 is the FINAL figure ALONE (the poster) and, since
-  // tN wraps to exactly 0 at t=loopSec, the seam is byte-exact. The count-up rolls through 1..N-1 in
-  // the interior and settles back on the final figure.
+  // (center c=0), members 1..N-1 are the ascending count-up frames.
+  //
+  // ROLL SPEED (`od.rollSpan`, additive-optional, default 1 => byte-identical): the fraction of the
+  // loop the count-up occupies. The roll ENDS at the seam, so the members are laid out BACKWARD from
+  // tN=1 in uniform steps of `step = rollSpan/N`: member k (k>=1) centers at c = 1 - (N-k)*step, and
+  // member 0 (the final figure) centers at c = 0 (=~ 1, one step after the last roll frame). Every
+  // consecutive gap is exactly `step`, so the loop-safety algebra is unchanged with 1/N generalized to
+  // `step` — composition-spec.js validates 2*dwell + fade <= rollSpan/N. At rollSpan=1 this collapses
+  // to c = k/N EXACTLY (the original placement), which is why an absent rollSpan is byte-transparent.
+  //
+  // Below 1 the REST member (k=0) also takes a WIDE, ASYMMETRIC plateau: forward into the loop it holds
+  // full alpha right up to frame-1's fade-in, backward it keeps the normal dwell so it still crossfades
+  // in off the last roll frame. That hold is REQUIRED, not cosmetic — the roll members only cover
+  // `rollSpan` of the loop, so a symmetric dwell on member 0 would leave the hero number BLANK for the
+  // whole non-roll stretch. Net effect: the number rests on its final value for (1 - rollSpan) of the
+  // loop, then rolls fast through 1..N-1 and lands back on the final figure at the seam. At rollSpan=1
+  // the members tile the entire loop, there is no gap to fill, and this widening is skipped entirely.
+  //
+  // At tN=0, member 0 has distance 0 -> alpha=1; every roll member (k>=1) has cyclic distance >= step >=
+  // dwell+fade, so those are already fully faded (alpha=0) — frame 0 is the FINAL figure ALONE (the
+  // poster) and, since tN wraps to exactly 0 at t=loopSec, the seam is byte-exact.
   function odometerAlpha(C, layerIndex, tN) {
     const od = C.spec.odometer;
     if (!od) return 1;
@@ -281,18 +296,37 @@
     if (k < 0) return 1;
 
     const N = od.layers.length;
-    const c = k / N;
-    const raw = tN - c;
-    const d = raw - Math.round(raw);
-    const ad = Math.abs(d);
     const dwell = od.dwell != null ? od.dwell : ODOMETER_DEFAULTS.dwell;
     const fade = od.fade != null ? od.fade : ODOMETER_DEFAULTS.fade;
+    const rollSpan = od.rollSpan != null ? od.rollSpan : ODOMETER_DEFAULTS.rollSpan;
+    const step = rollSpan / N;
 
-    if (ad <= dwell) return 1;
-    if (fade > 0 && ad < dwell + fade) {
-      return 0.5 + 0.5 * Math.cos(Math.PI * (ad - dwell) / fade);
+    // Raised-cosine shoulder: 1 at the plateau edge, 0 at plateau+fade (shared by both branches).
+    const shoulder = (dist, plateau) => {
+      if (dist <= plateau) return 1;
+      if (fade > 0 && dist < plateau + fade) return 0.5 + 0.5 * Math.cos(Math.PI * (dist - plateau) / fade);
+      return 0;
+    };
+
+    // The REST member's wide forward hold (compressed roll only). Measured as a FORWARD cyclic distance,
+    // not the symmetric |d| — the hold runs most of the way around the loop, well past the |d| <= 0.5
+    // fold. It ends exactly where frame-1 starts fading in, so the two crossfade.
+    if (k === 0 && rollSpan < 1) {
+      const fwd = tN - Math.floor(tN);                                  // (tN - 0) mod 1
+      const hold = Math.max(dwell, 1 - rollSpan + step - dwell - fade); // = frame-1's fade-in onset
+      const a = shoulder(fwd, hold);
+      if (a > 0) return a;
+      return shoulder(1 - fwd, dwell); // the seam side: crossfade in off frame-(N-1)
     }
-    return 0;
+
+    // At rollSpan=1 use the ORIGINAL `k/N` expression verbatim, not the algebraically-equal backward
+    // walk: `1 - (N-k)*(1/N)` lands one ULP off `k/N` (e.g. 0.09999999999999998 vs 0.1), which flips
+    // the `<=` at an exact plateau boundary. Same center, different bits — and byte-identity on the
+    // default path is the whole point of the additive freeze.
+    const c = (rollSpan === 1) ? (k / N) : (k === 0 ? 0 : 1 - (N - k) * step);
+    const raw = tN - c;
+    const d = raw - Math.round(raw);
+    return shoulder(Math.abs(d), dwell);
   }
 
   // Loop-safe CTA-pulse + date-ticker transform (Phase 12, NEWT-04 — the Event template). Returns the
@@ -334,9 +368,11 @@
   const WORD_REVEAL_DEFAULTS = { floor: 0.15, dipW: 0.08, sweepSpan: 0.6, hold: 0.2 };
   // Phase 12 additive-primitive defaults — MUST stay in lockstep with the same-named constants in
   // src/composition-spec.js (its loop-safety invariant / member validation is proven against exactly
-  // these). ODOMETER_DEFAULTS feed odometerAlpha's dwell/fade; PULSE_DEFAULTS are benign zeros /
-  // harmonic 1 so an under-specified pulse member contributes NOTHING (never an unrequested pulse).
-  const ODOMETER_DEFAULTS = { dwell: 0.02, fade: 0.03 };
+  // these). ODOMETER_DEFAULTS feed odometerAlpha's dwell/fade/rollSpan; PULSE_DEFAULTS are benign zeros
+  // / harmonic 1 so an under-specified pulse member contributes NOTHING (never an unrequested pulse).
+  // rollSpan default 1 = the count-up spread across the WHOLE loop (the original placement), so an
+  // omitted rollSpan is byte-transparent.
+  const ODOMETER_DEFAULTS = { dwell: 0.02, fade: 0.03, rollSpan: 1 };
   const PULSE_DEFAULTS = { scaleAmp: 0, driftX: 0, driftY: 0, harmonic: 1 };
 
   // Loop-safe word-by-word reveal alpha (Phase 11, NEWT-02 — the Quote template). Returns the LITERAL

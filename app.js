@@ -14,6 +14,21 @@
 
   var BG_MANIFEST = { loops: [], base: '#0a0a0f' };
 
+  // Which TEXT slots each template exposes for the per-slot text variables (COLOR, SIZE and hard \n
+  // LINE BREAKS). These keys match the applyTextControls() map keys in each templates/<t>/plates.html
+  // (14-01's slot map) EXACTLY, so a chosen colour/size lands on the right element(s) — and they match
+  // the server builder's own TEXT_SLOTS map, so the static app offers the same set. Structural slots
+  // (photo, lockup, ground) are deliberately absent: they get no text controls.
+  var TEXT_SLOTS = {
+    'new-hire': ['greeting', 'name', 'role'],
+    'quote': ['quote', 'attribution', 'role'],
+    'carousel': ['beats'],
+    'hot-take': ['statement'],
+    'stat': ['metric', 'support'],
+    'event': ['title', 'date', 'cta'],
+  };
+  function isTextSlot(template, key) { return (TEXT_SLOTS[template] || []).indexOf(key) !== -1; }
+
   var State = {
     templateName: null,
     ratio: '1x1',
@@ -24,6 +39,10 @@
     content: {},          // slot -> value (strings; 'json' fields hold parsed objects)
     colors: {},           // slot -> resolved brand hex (advanced control; absent = template default)
     sizes: {},            // slot -> font-size multiplier (advanced control; absent/1 = default)
+    // Transitions-panel TIMING overrides. buildSpec() re-expands from scratch on every structural
+    // change (copy/colour/ratio/background), which emits each template's DEFAULT timing — so a user's
+    // tweaks are re-applied (and re-clamped against the fresh spec) afterwards instead of being lost.
+    timingOverrides: { wordReveal: {}, odometer: {}, beatCycle: {}, pulse: {}, loopSec: null },
     bgLoopId: null,       // null = procedural background
     bgOpacity: 0.32,
     bgImage: null,        // { url, fit:'cover'|'contain', ink:'light'|'dark' } | null
@@ -174,25 +193,40 @@
         var pstatus = document.createElement('div');
         pstatus.className = 'file-btn'; pstatus.id = 'photo-status';
         field.appendChild(pstatus);
-      } else if (f.type === 'textarea' || f.type === 'json') {
+      } else if (f.type === 'json') {
+        // Structural (array/object) slot — edited as JSON. Carousel's `beats` is still a TEXT slot for
+        // colour/size purposes (its lines are array entries, not \n-separated), so it gets whole-slot
+        // controls even though the copy itself is edited as JSON.
         var ta = document.createElement('textarea');
-        ta.value = (f.type === 'json') ? f.def : (State.content[f.key] != null ? State.content[f.key] : f.def);
+        ta.value = f.def;
         field.appendChild(ta);
-        if (f.type === 'textarea') {
-          var ctrls = document.createElement('div'); field.appendChild(ctrls);
-          ta.addEventListener('input', function () { State.content[f.key] = ta.value; renderSlotControls(f.key, ctrls); scheduleRefresh(); });
-          renderSlotControls(f.key, ctrls);
-        } else {
-          ta.addEventListener('input', function () { State.content[f.key] = ta.value; scheduleRefresh(); });
+        ta.addEventListener('input', function () { State.content[f.key] = ta.value; scheduleRefresh(); });
+        if (isTextSlot(State.templateName, f.key)) {
+          var jctrls = document.createElement('div'); field.appendChild(jctrls);
+          renderSlotControls(f.key, jctrls, true);
         }
+      } else if (isTextSlot(State.templateName, f.key) || f.type === 'textarea') {
+        // EVERY text slot is a multi-line textarea — the render layer honours \n as a hard <br> in every
+        // slot (14-01), so a single-line <input> would silently withhold line breaks (and per-line
+        // colours) from the short slots (name / metric / date / CTA …). Same contract as the server
+        // builder: Enter = line break.
+        var ta2 = document.createElement('textarea');
+        ta2.rows = (f.type === 'textarea') ? 3 : 2;
+        ta2.value = State.content[f.key] != null ? State.content[f.key] : f.def;
+        field.appendChild(ta2);
+        var hint = document.createElement('p');
+        hint.className = 'hint';
+        hint.textContent = 'Enter = line break.';
+        field.appendChild(hint);
+        var ctrls = document.createElement('div'); field.appendChild(ctrls);
+        ta2.addEventListener('input', function () { State.content[f.key] = ta2.value; renderSlotControls(f.key, ctrls); scheduleRefresh(); });
+        renderSlotControls(f.key, ctrls);
       } else {
         var input = document.createElement('input');
         input.type = 'text';
         input.value = State.content[f.key] != null ? State.content[f.key] : f.def;
         field.appendChild(input);
-        var ctrls2 = document.createElement('div'); field.appendChild(ctrls2);
-        input.addEventListener('input', function () { State.content[f.key] = input.value; renderSlotControls(f.key, ctrls2); scheduleRefresh(); });
-        renderSlotControls(f.key, ctrls2);
+        input.addEventListener('input', function () { State.content[f.key] = input.value; scheduleRefresh(); });
       }
       wrap.appendChild(field);
     });
@@ -243,17 +277,17 @@
   // matching the old builder). State.colors[slot] is a single hex (whole slot) OR an array of hex|null
   // (one per authored \n-line); both ride the spec.slots.colors contract plates.html applyTextControls
   // reads. Rebuilds live as the copy's line count changes.
-  function renderSlotControls(slot, container) {
+  function renderSlotControls(slot, container, wholeOnly) {
     container.innerHTML = '';
     var val = State.content[slot] != null ? String(State.content[slot]) : '';
-    var lines = val.split('\n');
+    var lines = wholeOnly ? [val] : val.split('\n');
 
     if (lines.length <= 1) {
       var cur = typeof State.colors[slot] === 'string' ? State.colors[slot]
               : (Array.isArray(State.colors[slot]) ? State.colors[slot][0] : '');
       var row = swatchRow('', cur, function (hex) {
         if (hex) State.colors[slot] = hex; else delete State.colors[slot];
-        renderSlotControls(slot, container); scheduleRefresh();
+        renderSlotControls(slot, container, wholeOnly); scheduleRefresh();
       });
       row.appendChild(sizeControl(slot));
       container.appendChild(row);
@@ -268,7 +302,7 @@
       container.appendChild(swatchRow('L' + (i + 1), arr[i] || '', function (hex) {
         arr[i] = hex || null;
         if (arr.every(function (x) { return !x; })) delete State.colors[slot]; else State.colors[slot] = arr.slice();
-        renderSlotControls(slot, container); scheduleRefresh();
+        renderSlotControls(slot, container, wholeOnly); scheduleRefresh();
       }));
     });
     var srow = document.createElement('div'); srow.className = 'slot-controls';
@@ -284,7 +318,16 @@
     if (!State.photoOriginal) { delete State.content.photo; refresh(); return; }
     if (!State.matteOn) { State.content.photo = State.photoOriginal; if (ps) ps.textContent = ''; refresh(); return; }
     if (ps) ps.textContent = 'Removing background… (first run downloads the model, ~9 MB)';
-    window.MATTING.removeBackgroundFromUrl(State.photoOriginal).then(function (url) {
+    // Race a timeout. MediaPipe needs WebGL; where the GPU context can't be created it logs the failure
+    // to the console and its promise NEVER settles, so the .catch below never runs and the UI sits on
+    // "Removing background…" forever with the photo apparently doing nothing. Always settle.
+    var matte = Promise.race([
+      window.MATTING.removeBackgroundFromUrl(State.photoOriginal),
+      new Promise(function (_, rej) {
+        setTimeout(function () { rej(new Error('timed out — WebGL/model unavailable')); }, 45000);
+      }),
+    ]);
+    matte.then(function (url) {
       State.content.photo = url; if (el('photo-status')) el('photo-status').textContent = 'Background removed.'; refresh();
     }).catch(function (e) {
       State.content.photo = State.photoOriginal;
@@ -302,6 +345,10 @@
     State.sizes = {};
     State.photoOriginal = null;
     State.matteOn = false;
+    // A different template has a different timing SHAPE (odometer vs wordReveal vs beatCycle vs pulse),
+    // so drop the per-move overrides — a stale one must not ride onto the new template. loopSec is
+    // shared by all six, so it survives the switch.
+    State.timingOverrides = { wordReveal: {}, odometer: {}, beatCycle: {}, pulse: {}, loopSec: State.timingOverrides.loopSec };
     t.fields.forEach(function (f) {
       if (f.type === 'json') { try { State.content[f.key] = JSON.parse(f.def); } catch (e) { State.content[f.key] = f.def; } }
       else if (f.key !== 'photo') State.content[f.key] = f.def;
@@ -361,7 +408,320 @@
     var spec = safeExpand(State.templateName, slots, opts);
     if (State.bgLoopId) spec.backgroundVideo = { loop: State.bgLoopId, opacity: State.bgOpacity };
     if (State.bgImage) spec.backgroundImage = { src: State.bgImage.url, fit: State.bgImage.fit || 'cover' };
+    applyTimingOverrides(spec);
     return spec;
+  }
+
+  // ---- transitions (timing) --------------------------------------------------------------------
+  //
+  // Per-template loop-safe TIMING sliders: loop duration for every template, plus the per-move timing
+  // the current spec actually carries (stat odometer, quote wordReveal, carousel beatCycle, event
+  // pulse). Every slider is CLAMPED to the loop-safe range from the composition-spec contract, read
+  // against the LIVE spec's N, so a seam-breaking value can't be produced. Timing does NOT change the
+  // captured plates — the composer reads these fields live — so a change mutates State.spec and
+  // rebuilds the composer only, with NO plate re-render.
+
+  function clampNum(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+  function round4(x) { return Math.round(x * 10000) / 10000; }
+
+  // The roll-speed (rollSpan) floor: each count-up value must land on enough sampled frames to read as
+  // a value rather than a blur. Below ~3 frames per value the roll degrades (the loop/poster/seam
+  // invariants still hold — it just stops reading as a count-up), so the slider stops there.
+  // Rounded UP to a whole 0.01 — the slider's own step — so the floor is never BELOW the sampling
+  // bound and the template's default rollSpan still lands on an exact step (an <input type=range>
+  // snaps to min + k*step, so a ragged min would silently shift the default off its own value).
+  function minRollSpan(spec) {
+    var N = (spec.odometer && spec.odometer.layers && spec.odometer.layers.length) || 1;
+    var fps = spec.fps || 30;
+    var loopSec = (spec.motion && spec.motion.speed && spec.motion.speed.loopSec) || spec.dur || 8;
+    return Math.min(1, Math.max(0.02, Math.ceil(3 * N / (fps * loopSec) * 100) / 100));
+  }
+
+  // Clamp a wordReveal/odometer/beatCycle field against the LIVE spec's loop-safe invariants. Coupled
+  // fields are clamped against each other's CURRENT value, so the spec stays valid whichever slider
+  // moves and whatever N is.
+  function clampTiming(spec, group, field, value) {
+    var v = Number(value);
+    if (!isFinite(v)) v = 0;
+    if (group === 'wordReveal') {
+      var wr = spec.wordReveal || {};
+      var dipW = wr.dipW != null ? wr.dipW : 0.08;
+      var sweepSpan = wr.sweepSpan != null ? wr.sweepSpan : 0.6;
+      var hold = wr.hold != null ? wr.hold : 0.2;
+      // invariants: floor in [0,1); dipW <= hold; hold + sweepSpan + dipW <= 1; sweepSpan > 0.
+      if (field === 'floor') return round4(clampNum(v, 0, 0.95));
+      if (field === 'dipW') return round4(clampNum(v, 0, Math.max(0, Math.min(hold, 1 - hold - sweepSpan))));
+      if (field === 'hold') return round4(clampNum(v, dipW, Math.max(dipW, 1 - sweepSpan - dipW)));
+      if (field === 'sweepSpan') return round4(clampNum(v, 0.02, Math.max(0.02, 1 - hold - dipW)));
+    }
+    if (group === 'odometer' || group === 'beatCycle') {
+      var g = spec[group] || {};
+      var N = (g.layers && g.layers.length) || 1;
+      // The one-at-a-time bound is 2*dwell + fade <= rollSpan/N. beatCycle has no rollSpan, so its
+      // members tile the whole loop and the bound is the classic 1/N.
+      var span = (group === 'odometer' && g.rollSpan != null) ? g.rollSpan : 1;
+      var dwell = g.dwell != null ? g.dwell : 0.02;
+      var fade = g.fade != null ? g.fade : 0.03;
+      // rollSpan is bounded only by the sampling floor and 1. It does NOT have to respect the current
+      // dwell/fade, because narrowing it RESCALES them proportionally (see setRollSpan) — the same
+      // fraction-of-slot relationship the template's own defaults are built on. Clamping the span
+      // against them instead would let a wide digit dwell jam the roll-speed slider partway.
+      if (field === 'rollSpan') return round4(clampNum(v, minRollSpan(spec), 1));
+      var inv = span / N;
+      if (field === 'dwell') {
+        var maxDwell = Math.max(0, (inv - fade) / 2);
+        var nd = clampNum(v, 0, maxDwell);
+        if (nd + fade <= 0) nd = Math.min(maxDwell, 0.001);
+        return round4(nd);
+      }
+      if (field === 'fade') {
+        var maxFade = Math.max(0, inv - 2 * dwell);
+        var nf = clampNum(v, 0, maxFade);
+        if (dwell + nf <= 0) nf = Math.min(maxFade, 0.001);
+        return round4(nf);
+      }
+    }
+    return round4(v);
+  }
+
+  // Clamp a pulse member field. harmonic MUST be a positive integer (endpoint safety — a non-integer
+  // breaks the loop seam).
+  function clampPulse(field, value) {
+    var v = Number(value);
+    if (!isFinite(v)) v = 0;
+    if (field === 'harmonic') return Math.max(1, Math.min(6, Math.round(v)));
+    if (field === 'scaleAmp') return round4(clampNum(v, 0, 0.3));
+    if (field === 'driftY') return Math.round(clampNum(v, 0, 24));
+    return v;
+  }
+
+  // Descriptors for the CURRENT spec. Loop duration is always present; a per-move control only appears
+  // for the timing field the spec actually carries (e.g. no odometer sliders for a non-numeric metric).
+  function transitionControlsFor(spec) {
+    var list = [];
+    var loopSec = (spec.motion && spec.motion.speed && spec.motion.speed.loopSec) || spec.dur || 8;
+    list.push({ id: 'tr-loopsec', label: 'Loop duration', min: 2, max: 16, step: 0.5, value: loopSec, kind: 'loopSec', fmt: function (v) { return v.toFixed(1) + 's'; } });
+
+    if (spec.odometer) {
+      var od = spec.odometer;
+      var N = (od.layers && od.layers.length) || 1;
+      // ROLL SPEED first — it is the knob that decides whether the count-up reads as an odometer. Shown
+      // as the roll's real duration in seconds (what you actually perceive), not the raw loop fraction.
+      list.push({
+        id: 'tr-od-span', label: 'Stat — roll speed', min: minRollSpan(spec), max: 1, step: 0.01,
+        value: od.rollSpan != null ? od.rollSpan : 1, kind: 'odometer', field: 'rollSpan',
+        // Read loopSec LIVE, not from the closure: the Loop-duration slider changes it without
+        // re-rendering this panel, and a stale value would mis-report the roll's real duration.
+        fmt: function (v) {
+          var L = (State.spec && State.spec.motion && State.spec.motion.speed && State.spec.motion.speed.loopSec) || loopSec;
+          return (v * L).toFixed(2) + 's roll · ' + (v * L / N * 1000).toFixed(0) + 'ms/value';
+        },
+      });
+      list.push({ id: 'tr-od-dwell', label: 'Stat — digit dwell', min: 0, max: round4(1 / N), step: 0.001, value: od.dwell != null ? od.dwell : 0.02, kind: 'odometer', field: 'dwell', fmt: function (v) { return v.toFixed(3); } });
+      list.push({ id: 'tr-od-fade', label: 'Stat — digit crossfade', min: 0, max: round4(1 / N), step: 0.001, value: od.fade != null ? od.fade : 0.03, kind: 'odometer', field: 'fade', fmt: function (v) { return v.toFixed(3); } });
+    }
+    if (spec.wordReveal) {
+      var wr = spec.wordReveal;
+      list.push({ id: 'tr-wr-hold', label: 'Quote — reveal hold', min: 0, max: 0.5, step: 0.01, value: wr.hold != null ? wr.hold : 0.2, kind: 'wordReveal', field: 'hold' });
+      list.push({ id: 'tr-wr-sweep', label: 'Quote — sweep span', min: 0.1, max: 0.9, step: 0.02, value: wr.sweepSpan != null ? wr.sweepSpan : 0.6, kind: 'wordReveal', field: 'sweepSpan' });
+      list.push({ id: 'tr-wr-dipw', label: 'Quote — dip width', min: 0, max: 0.4, step: 0.01, value: wr.dipW != null ? wr.dipW : 0.08, kind: 'wordReveal', field: 'dipW' });
+      list.push({ id: 'tr-wr-floor', label: 'Quote — dip floor (min opacity)', min: 0, max: 0.9, step: 0.05, value: wr.floor != null ? wr.floor : 0.15, kind: 'wordReveal', field: 'floor' });
+    }
+    if (spec.beatCycle) {
+      var bc = spec.beatCycle;
+      list.push({ id: 'tr-bc-dwell', label: 'Carousel — beat dwell', min: 0, max: 0.2, step: 0.005, value: bc.dwell != null ? bc.dwell : 0.09, kind: 'beatCycle', field: 'dwell' });
+      list.push({ id: 'tr-bc-fade', label: 'Carousel — beat crossfade', min: 0, max: 0.2, step: 0.005, value: bc.fade != null ? bc.fade : 0.06, kind: 'beatCycle', field: 'fade' });
+    }
+    if (spec.pulse && spec.pulse.members) {
+      var cta = null, date = null;
+      spec.pulse.members.forEach(function (m) { if (m.name === 'cta') cta = m; if (m.name === 'date') date = m; });
+      if (cta) {
+        list.push({ id: 'tr-cta-amp', label: 'Event — CTA pulse amount', min: 0, max: 0.3, step: 0.01, value: cta.scaleAmp != null ? cta.scaleAmp : 0.05, kind: 'pulse', member: 'cta', field: 'scaleAmp' });
+        list.push({ id: 'tr-cta-harm', label: 'Event — CTA pulses / loop', min: 1, max: 6, step: 1, value: cta.harmonic != null ? cta.harmonic : 2, kind: 'pulse', member: 'cta', field: 'harmonic' });
+      }
+      if (date) {
+        list.push({ id: 'tr-date-drift', label: 'Event — date tick', min: 0, max: 24, step: 1, value: date.driftY != null ? date.driftY : 6, kind: 'pulse', member: 'date', field: 'driftY' });
+        list.push({ id: 'tr-date-harm', label: 'Event — date ticks / loop', min: 1, max: 6, step: 1, value: date.harmonic != null ? date.harmonic : 3, kind: 'pulse', member: 'date', field: 'harmonic' });
+      }
+    }
+    return list;
+  }
+
+  var TRANSITION_DESCRIPTORS = [];
+
+  function fmtTiming(d, v) {
+    if (d.fmt) return d.fmt(Number(v));
+    if (d.field === 'harmonic') return String(Math.round(v)) + '×';
+    if (d.field === 'driftY') return String(Math.round(v)) + 'px';
+    return Number(v).toFixed(2);
+  }
+
+  function renderTransitionControls() {
+    var container = el('transition-controls');
+    if (!container || !State.spec) return;
+    TRANSITION_DESCRIPTORS = transitionControlsFor(State.spec);
+    container.innerHTML = '';
+    TRANSITION_DESCRIPTORS.forEach(function (d) {
+      var row = document.createElement('div');
+      row.className = 'slider-row wide';
+      var lb = document.createElement('label');
+      lb.setAttribute('for', d.id);
+      lb.textContent = d.label;
+      var input = document.createElement('input');
+      input.type = 'range'; input.id = d.id;
+      input.min = String(d.min); input.max = String(d.max); input.step = String(d.step);
+      input.value = String(d.value);
+      var out = document.createElement('output');
+      out.id = d.id + '-value';
+      out.textContent = fmtTiming(d, d.value);
+      input.addEventListener('input', function () { onTransitionInput(d, parseFloat(input.value)); });
+      row.appendChild(lb); row.appendChild(input); row.appendChild(out);
+      container.appendChild(row);
+    });
+  }
+
+  function onTransitionInput(d, rawValue) {
+    if (!State.spec) return;
+    var applied;
+    if (d.kind === 'loopSec') {
+      applied = Math.round(clampNum(Number(rawValue), 2, 16) * 10) / 10;
+      setLoopSec(applied);
+      State.timingOverrides.loopSec = applied;
+    } else if (d.kind === 'pulse') {
+      applied = clampPulse(d.field, rawValue);
+      var mem = null;
+      State.spec.pulse.members.forEach(function (m) { if (m.name === d.member) mem = m; });
+      if (mem) mem[d.field] = applied;
+      State.timingOverrides.pulse[d.member + '::' + d.field] = applied;
+      rebuildComposer();
+    } else if (d.kind === 'odometer' && d.field === 'rollSpan') {
+      applied = setRollSpan(clampTiming(State.spec, 'odometer', 'rollSpan', rawValue));
+    } else {
+      applied = clampTiming(State.spec, d.kind, d.field, rawValue);
+      State.spec[d.kind] = Object.assign({}, State.spec[d.kind]);
+      State.spec[d.kind][d.field] = applied;
+      State.timingOverrides[d.kind][d.field] = applied;
+      rebuildComposer();
+    }
+    // Reflect the clamp on this slider and refresh coupled siblings — clamping one field can shift the
+    // allowed range of the others (and rollSpan rescales the whole dwell/fade budget).
+    syncTransitionControls();
+  }
+
+  // Roll speed. Each digit's dwell/fade are a FRACTION OF ITS OWN SLOT (rollSpan/N) — that is how the
+  // template derives its defaults — so changing the span rescales them by the same ratio. This also
+  // keeps the loop-safe invariant satisfied for free: if 2*dwell + fade <= span/N held before, scaling
+  // dwell/fade by r = span'/span gives r*(2*dwell + fade) <= r*span/N = span'/N.
+  function setRollSpan(span) {
+    var od = State.spec.odometer;
+    if (!od) return span;
+    var prev = od.rollSpan != null ? od.rollSpan : 1;
+    var r = prev > 0 ? (span / prev) : 1;
+    var next = Object.assign({}, od, { rollSpan: span });
+    var N = (od.layers && od.layers.length) || 1;
+    var dwell = od.dwell != null ? od.dwell : 0.02;
+    var fade = od.fade != null ? od.fade : 0.03;
+    next.dwell = round4(dwell * r);
+    next.fade = round4(fade * r);
+    // round4 can nudge the pair just over the bound at tiny spans — trim the crossfade if so.
+    var overshoot = (2 * next.dwell + next.fade) - span / N;
+    if (overshoot > 0) next.fade = round4(Math.max(0, next.fade - overshoot));
+    State.spec.odometer = next;
+    State.timingOverrides.odometer.rollSpan = span;
+    State.timingOverrides.odometer.dwell = next.dwell;
+    State.timingOverrides.odometer.fade = next.fade;
+    rebuildComposer();
+    return span;
+  }
+
+  // Loop duration drives BOTH motion.speed.loopSec and spec.dur (dur === loopSec: one clean loop), and
+  // restarts the preview clock so the new period takes effect immediately.
+  function setLoopSec(sec) {
+    if (!State.spec) return;
+    State.spec.motion = Object.assign({}, State.spec.motion);
+    State.spec.motion.speed = Object.assign({}, State.spec.motion.speed, { loopSec: sec });
+    State.spec.dur = sec;
+    rebuildComposer();
+    updateMeta(State.spec);
+    // NOTE: the roll-speed floor depends on loopSec (frames per value), but the slider's `min` is left
+    // alone here on purpose. Raising it would clamp the <input>'s value above the rollSpan the spec
+    // actually holds, so the thumb and the readout would disagree with the render. clampTiming()
+    // recomputes the floor LIVE on the next drag instead, which self-corrects and stays reversible.
+    startPreview();
+  }
+
+  function rebuildComposer() {
+    if (!State.spec || !State.images) return;
+    State.composer = window.SOCIAL_COMPOSER.buildComposer(State.spec);
+  }
+
+  // Re-read every slider from the live spec (values may have been clamped, and a rollSpan change
+  // rescales the dwell/fade ceilings) without rebuilding the DOM and losing the drag.
+  function syncTransitionControls() {
+    if (!State.spec) return;
+    TRANSITION_DESCRIPTORS.forEach(function (d) {
+      var input = el(d.id), out = el(d.id + '-value');
+      if (!input) return;
+      var v = readTransitionValue(d, State.spec);
+      if (v == null) return;
+      if (d.field === 'dwell' || d.field === 'fade') input.max = String(round4(maxFor(State.spec, d)));
+      // Deliberately NOT touching a rollSpan slider's `min` here: an <input type=range> clamps its own
+      // value to min, so raising it (loopSec dropped -> fewer frames per value) would push the thumb
+      // above the rollSpan the spec actually holds and the thumb would contradict the readout. The
+      // floor is enforced in ONE place — clampTiming(), which recomputes it live on the next drag.
+      input.value = String(v);
+      if (out) out.textContent = fmtTiming(d, v);
+    });
+  }
+
+  function maxFor(spec, d) {
+    var g = spec[d.kind] || {};
+    var N = (g.layers && g.layers.length) || 1;
+    var span = (d.kind === 'odometer' && g.rollSpan != null) ? g.rollSpan : 1;
+    return Math.max(0.001, span / N);
+  }
+
+  function readTransitionValue(d, spec) {
+    if (d.kind === 'loopSec') return (spec.motion && spec.motion.speed && spec.motion.speed.loopSec) || spec.dur || 8;
+    if (d.kind === 'pulse') {
+      var mem = null;
+      ((spec.pulse && spec.pulse.members) || []).forEach(function (m) { if (m.name === d.member) mem = m; });
+      return mem ? (mem[d.field] != null ? mem[d.field] : 0) : null;
+    }
+    var g = spec[d.kind];
+    if (!g) return null;
+    return g[d.field] != null ? g[d.field] : null;
+  }
+
+  // Re-apply (and RE-CLAMP) the active timing overrides onto a freshly-expanded spec. expand() emits
+  // each template's DEFAULT timing, so a structural refresh (colour/size/copy/ratio change) would
+  // otherwise silently drop the user's tweaks. Re-clamping against the FRESH spec means an override
+  // that is no longer loop-safe (N changed with the copy) is narrowed rather than breaking the seam.
+  function applyTimingOverrides(spec) {
+    var to = State.timingOverrides;
+    if (to.loopSec != null && spec.motion && spec.motion.speed) {
+      spec.motion.speed.loopSec = to.loopSec;
+      spec.dur = to.loopSec;
+    }
+    // rollSpan FIRST — it sets the dwell/fade budget the others are clamped against.
+    if (spec.odometer && to.odometer.rollSpan != null) {
+      spec.odometer.rollSpan = clampTiming(spec, 'odometer', 'rollSpan', to.odometer.rollSpan);
+    }
+    ['wordReveal', 'odometer', 'beatCycle'].forEach(function (group) {
+      if (!spec[group]) return;
+      Object.keys(to[group]).forEach(function (field) {
+        if (field === 'rollSpan') return; // already applied
+        spec[group][field] = clampTiming(spec, group, field, to[group][field]);
+      });
+    });
+    if (spec.pulse && spec.pulse.members) {
+      Object.keys(to.pulse).forEach(function (compound) {
+        var parts = compound.split('::');
+        spec.pulse.members.forEach(function (m) {
+          if (m.name === parts[0]) m[parts[1]] = clampPulse(parts[1], to.pulse[compound]);
+        });
+      });
+    }
   }
 
   // ---- render + preview ------------------------------------------------------------------------
@@ -386,6 +746,7 @@
       sizeCanvas(spec);
       manageBg(spec);
       updateMeta(spec);
+      renderTransitionControls();
       startPreview();
       setStatus('', '');
       State.rendering = false;
