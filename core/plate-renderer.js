@@ -94,25 +94,44 @@
         var settled = false;
         function fail(err) { if (!settled) { settled = true; if (iframe.parentNode) iframe.parentNode.removeChild(iframe); reject(err); } }
 
-        iframe.onload = function () {
-          var win = iframe.contentWindow, doc = iframe.contentDocument;
-          if (!win || !doc) { fail(new Error('plate iframe has no document')); return; }
+        // Do NOT hang this off iframe.onload. Appending an iframe fires `load` for its initial
+        // about:blank document BEFORE srcdoc is parsed; that document has no [data-plate] elements, so
+        // transcribing it yields an all-transparent plate set — every layer blank, no error thrown.
+        // The very first render tended to win the race and look fine, which is why this presented as
+        // "it works on load, then everything vanishes the moment you touch a control".
+        // Poll for the real srcdoc document instead.
+        document.body.appendChild(iframe);
+        iframe.srcdoc = html;
+
+        whenPlateDoc(iframe).then(function (fr) {
+          var win = fr.win, doc = fr.doc;
           var fontsReady = (doc.fonts && doc.fonts.ready) ? doc.fonts.ready : Promise.resolve();
-          fontsReady.then(function () {
+          return fontsReady.then(function () {
             return settleFit(win);
           }).then(function () {
             return whenImagesReady(doc);
           }).then(function () {
             if (!settled) { settled = true; resolve({ iframe: iframe, win: win, doc: doc }); }
-          }).catch(fail);
-        };
-
-        document.body.appendChild(iframe);
-        iframe.srcdoc = html;
+          });
+        }).catch(fail);
         // Safety timeout — never hang the UI on a broken template. Generous so a throttled background
         // tab (timers clamped to ~1s) still completes rather than false-timing-out.
         setTimeout(function () { fail(new Error('plate render timed out for ' + templateName)); }, 20000);
       });
+    });
+  }
+
+  // Resolve once the iframe holds the PARSED srcdoc document — identified by it actually containing
+  // plate elements, which the placeholder about:blank document never does.
+  function whenPlateDoc(iframe) {
+    return new Promise(function (resolve, reject) {
+      var tries = 0;
+      (function poll() {
+        var doc = iframe.contentDocument, win = iframe.contentWindow;
+        if (doc && win && doc.querySelector('[data-plate]')) { resolve({ win: win, doc: doc }); return; }
+        if (++tries > 400) { reject(new Error('plate document never parsed')); return; }   // 10s
+        setTimeout(poll, 25);
+      })();
     });
   }
 
