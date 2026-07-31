@@ -217,7 +217,8 @@
         ta.addEventListener('input', function () { State.content[f.key] = ta.value; scheduleRefresh(); });
         if (isTextSlot(State.templateName, f.key)) {
           var jctrls = document.createElement('div'); field.appendChild(jctrls);
-          renderSlotControls(f.key, jctrls, true);
+          ta.addEventListener('input', function () { maybeRefreshSlotControls(f.key, jctrls); });
+          renderSlotControls(f.key, jctrls);
         }
       } else if (isTextSlot(State.templateName, f.key) || f.type === 'textarea') {
         // EVERY text slot is a multi-line textarea — the render layer honours \n as a hard <br> in every
@@ -233,7 +234,11 @@
         hint.textContent = 'Enter = line break.';
         field.appendChild(hint);
         var ctrls = document.createElement('div'); field.appendChild(ctrls);
-        ta2.addEventListener('input', function () { State.content[f.key] = ta2.value; renderSlotControls(f.key, ctrls); scheduleRefresh(); });
+        ta2.addEventListener('input', function () {
+          State.content[f.key] = ta2.value;
+          maybeRefreshSlotControls(f.key, ctrls);
+          scheduleRefresh();
+        });
         renderSlotControls(f.key, ctrls);
       } else {
         var input = document.createElement('input');
@@ -246,32 +251,107 @@
     });
   }
 
-  // Per-slot color swatches (brand palette) + a compact size multiplier. Colors resolve to brand hex
-  // via SOCIAL_PALETTE and ride the content JSON (spec.slots.colors / .sizeScales) into plates.html's
-  // applyTextControls — the exact contract the server builder used.
-  // A row of brand-palette swatches (first = "default") that reports the picked hex (or null).
+  // ---- per-line text colour + per-slot size --------------------------------------------------------
+  //
+  // PER-LINE COLOUR ONLY. State.colors[slot] is ALWAYS an array of (brand hex | null), one entry per
+  // authored line — or the key is absent when every line is default. There is deliberately NO
+  // whole-slot string form any more.
+  //
+  // That dual representation was the bug behind "a colour change happens on hard return": the render
+  // layer (plates.html applyTextControls) gives the two shapes DIFFERENT meanings — a STRING colours the
+  // entire slot element, an ARRAY colours line i and leaves unlisted lines at the template default. So
+  // the instant a return flipped the stored shape, every line the string had been colouring silently
+  // dropped back to default. One shape, one meaning, no flip.
+  //
+  // Splitting a line INHERITS the colour of the line it came out of, so pressing Enter never changes
+  // what is already on screen.
+
+  // Last known good line count per slot — used only to ride out a transient JSON parse failure while a
+  // json slot (new-hire greeting / carousel beats) is mid-edit, so the rows don't churn.
+  var lastLineCount = {};
+
+  // The lines a slot's colour array indexes. Carousel `beats` is special: the render layer applies a
+  // per-line array to EVERY beat, so the row count is the MAX line count across the beats (normally 1 —
+  // one swatch that colours every beat). new-hire `greeting` is a 2-element array whose elements ARE its
+  // two display lines. Everything else splits its textarea value on \n.
+  function slotLineCount(slot) {
+    var v = State.content[slot];
+    var arr = null;
+    if (Array.isArray(v)) arr = v;
+    else if (typeof v === 'string' && v.charAt(0) === '[') {
+      try { var parsed = JSON.parse(v); if (Array.isArray(parsed)) arr = parsed; }
+      catch (e) { return lastLineCount[slot] || 1; }   // mid-edit JSON: hold the current row count
+    }
+    var n;
+    if (arr && slot === 'beats') {
+      n = 1;
+      arr.forEach(function (b) { n = Math.max(n, String(b == null ? '' : b).split('\n').length); });
+    } else if (arr) {
+      n = Math.max(1, arr.length);
+    } else {
+      n = Math.max(1, String(v == null ? '' : v).split('\n').length);
+    }
+    lastLineCount[slot] = n;
+    return n;
+  }
+
+  // Normalise the stored colours to exactly n entries. Migrates a legacy whole-slot string by giving
+  // EVERY line that colour (so the switch to arrays is visually invisible); grows by inheriting the line
+  // above (a split keeps its colour); truncates on shrink.
+  function colorsFor(slot, n) {
+    var c = State.colors[slot];
+    var arr;
+    if (Array.isArray(c)) arr = c.slice();
+    else if (typeof c === 'string' && c) { arr = []; for (var i = 0; i < n; i++) arr.push(c); }
+    else arr = [];
+    while (arr.length < n) arr.push(arr.length ? arr[arr.length - 1] : null);
+    arr.length = n;
+    return arr;
+  }
+
+  function storeColors(slot, arr) {
+    var any = arr.some(function (x) { return !!x; });
+    if (any) State.colors[slot] = arr.slice(); else delete State.colors[slot];
+  }
+
+  function markActiveSwatch(sw, hex) {
+    Array.prototype.forEach.call(sw.children, function (b) {
+      b.classList.toggle('active', b.getAttribute('data-hex') === (hex || ''));
+    });
+  }
+
+  // One row of brand-palette swatches (first = "Default"). onPick receives (hex|null, swatchContainer)
+  // so the caller can repaint the active state IN PLACE rather than rebuilding the row — rebuilding on
+  // every click is what made the picker feel wonky (it dropped hover/focus mid-interaction).
   function swatchRow(labelText, activeHex, onPick) {
     var pal = window.SOCIAL_PALETTE || { swatches: [] };
     var row = document.createElement('div');
     row.className = 'slot-controls';
-    if (labelText) { var lb = document.createElement('span'); lb.className = 'line-label'; lb.textContent = labelText; row.appendChild(lb); }
+    if (labelText) {
+      var lb = document.createElement('span');
+      lb.className = 'line-label';
+      lb.textContent = labelText;
+      row.appendChild(lb);
+    }
     var sw = document.createElement('div'); sw.className = 'swatches';
-    var def = document.createElement('button');
-    def.type = 'button'; def.className = 'swatch default'; def.title = 'Default'; def.setAttribute('data-hex', '');
-    def.addEventListener('click', function () { onPick(null); });
-    sw.appendChild(def);
-    pal.swatches.forEach(function (s) {
+    function add(hex, label, extraClass) {
       var b = document.createElement('button');
-      b.type = 'button'; b.className = 'swatch'; b.style.background = s.hex; b.title = s.label; b.setAttribute('data-hex', s.hex);
-      b.addEventListener('click', function () { onPick(s.hex); });
+      b.type = 'button';
+      b.className = 'swatch' + (extraClass ? ' ' + extraClass : '');
+      if (hex) b.style.background = hex;
+      b.title = label;
+      b.setAttribute('data-hex', hex || '');
+      b.addEventListener('click', function () { onPick(hex || null, sw); });
       sw.appendChild(b);
-    });
-    Array.prototype.forEach.call(sw.children, function (b) { b.classList.toggle('active', b.getAttribute('data-hex') === (activeHex || '')); });
+    }
+    add('', 'Default', 'default');
+    pal.swatches.forEach(function (sc) { add(sc.hex, sc.label); });
+    markActiveSwatch(sw, activeHex);
     row.appendChild(sw);
     return row;
   }
 
-  // A compact per-slot size multiplier ("A" + slider).
+  // A compact per-slot size multiplier ("A" + slider). Size stays PER SLOT — only colour is per line.
   function sizeControl(slot) {
     var pal = window.SOCIAL_PALETTE || { sizeRange: { min: 0.6, max: 1.6 } };
     var wrap = document.createElement('label'); wrap.className = 'size-mini'; wrap.textContent = 'A';
@@ -287,42 +367,38 @@
     return wrap;
   }
 
-  // Per-slot color + size controls, PER-LINE when the slot's copy has \n returns (LINE 1 / LINE 2 …,
-  // matching the old builder). State.colors[slot] is a single hex (whole slot) OR an array of hex|null
-  // (one per authored \n-line); both ride the spec.slots.colors contract plates.html applyTextControls
-  // reads. Rebuilds live as the copy's line count changes.
-  function renderSlotControls(slot, container, wholeOnly) {
+  // Build one swatch row per line, plus the slot's size row. Also PERSISTS the normalised array: if a
+  // hard return grew the line count, the stored array has to grow with it before the next render, or the
+  // new line would render at the default and the colour would appear to change.
+  function renderSlotControls(slot, container) {
+    var n = slotLineCount(slot);
+    var arr = colorsFor(slot, n);
+    storeColors(slot, arr);
     container.innerHTML = '';
-    var val = State.content[slot] != null ? String(State.content[slot]) : '';
-    var lines = wholeOnly ? [val] : val.split('\n');
-
-    if (lines.length <= 1) {
-      var cur = typeof State.colors[slot] === 'string' ? State.colors[slot]
-              : (Array.isArray(State.colors[slot]) ? State.colors[slot][0] : '');
-      var row = swatchRow('', cur, function (hex) {
-        if (hex) State.colors[slot] = hex; else delete State.colors[slot];
-        renderSlotControls(slot, container, wholeOnly); scheduleRefresh();
-      });
-      row.appendChild(sizeControl(slot));
-      container.appendChild(row);
-      return;
+    container.setAttribute('data-lines', String(n));
+    for (var i = 0; i < n; i++) {
+      container.appendChild((function (idx) {
+        return swatchRow('L' + (idx + 1), arr[idx] || '', function (hex, sw) {
+          arr[idx] = hex;
+          storeColors(slot, arr);
+          markActiveSwatch(sw, hex);
+          scheduleRefresh();
+        });
+      })(i));
     }
-
-    var arr = Array.isArray(State.colors[slot]) ? State.colors[slot].slice()
-            : (typeof State.colors[slot] === 'string' ? [State.colors[slot]] : []);
-    while (arr.length < lines.length) arr.push(null);
-    arr.length = lines.length;
-    lines.forEach(function (_, i) {
-      container.appendChild(swatchRow('L' + (i + 1), arr[i] || '', function (hex) {
-        arr[i] = hex || null;
-        if (arr.every(function (x) { return !x; })) delete State.colors[slot]; else State.colors[slot] = arr.slice();
-        renderSlotControls(slot, container, wholeOnly); scheduleRefresh();
-      }));
-    });
     var srow = document.createElement('div'); srow.className = 'slot-controls';
-    var slb = document.createElement('span'); slb.className = 'line-label'; slb.textContent = 'size'; srow.appendChild(slb);
+    var slb = document.createElement('span'); slb.className = 'line-label'; slb.textContent = 'size';
+    srow.appendChild(slb);
     srow.appendChild(sizeControl(slot));
     container.appendChild(srow);
+  }
+
+  // Rebuild a slot's rows ONLY when its line count changed. Rebuilding on every keystroke is the other
+  // half of the wonkiness — it threw away the swatch DOM (and any hover/active state) while typing.
+  function maybeRefreshSlotControls(slot, container) {
+    var n = slotLineCount(slot);
+    if (container.getAttribute('data-lines') === String(n)) return;
+    renderSlotControls(slot, container);
   }
 
   // Photo pipeline: apply the current photo to the spec, optionally removing its background in-browser
