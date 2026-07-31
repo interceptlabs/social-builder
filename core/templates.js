@@ -1,7 +1,6 @@
 /* Template registry (browser) — loads the UNMODIFIED server template modules (templates-src/*.cjs)
  * verbatim, so the composition specs are byte-identical to what the Node pipeline produced. No hand-
- * porting: each .cjs only `require`s ratios.js (+ stat.cjs pulls engine.js and brand-rules for an
- * allowlist it doesn't touch at expand time). We evaluate each module with a minimal require/module
+ * porting: each .cjs only `require`s ratios.js. We evaluate each module with a minimal require/module
  * shim and register module.exports by its .name.
  *
  * Exposes globalThis.SOCIAL_TEMPLATES = {
@@ -14,13 +13,13 @@
 (function (root) {
   'use strict';
 
-  var TEMPLATE_NAMES = ['new-hire', 'carousel', 'quote', 'stat', 'hot-take', 'event'];
+  var TEMPLATE_NAMES = ['new-hire', 'carousel', 'quote', 'hot-take', 'event'];
   var LABELS = {
     'new-hire': 'New Hire', 'carousel': 'Carousel', 'quote': 'Quote',
-    'stat': 'Stat', 'hot-take': 'Hot Take', 'event': 'Event',
+    'hot-take': 'Hot Take', 'event': 'Event',
   };
 
-  // brand-rules stub — the only export a template imports is ON_TOKEN_HEX (an allowlist Set); stat.cjs
+  // brand-rules stub — the only export imported is ON_TOKEN_HEX (an allowlist Set); text-palette.cjs
   // imports it but does not consult it inside expand(). Provided verbatim so the import never throws.
   var ON_TOKEN_HEX = new Set([
     '#ff00e5', '#1a7aff', '#00d862', '#ffffff', '#0a0a0f',

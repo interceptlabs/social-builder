@@ -48,6 +48,46 @@
         bold: { tileBase: 84, wavesPerLoop: 3, inkAlpha: 0.14 },
       },
     },
+
+    // terrace (2026-07-30) — quantized contour plateaus. `steps` IS the brand's hard-edged-steps count
+    // and stays inside 3..9 at every tier; the preset tiers move the STEP COUNT and the ink weight
+    // together, because more plateaus at the same alpha would read as a smooth grade (exactly what the
+    // rule forbids). Carbon is held subtler than halo at every tier — the same structural correction
+    // keyline carries for Jon's 07-22 "ribbon too strong on dark" note: light ink on a dark ground
+    // reads hotter than dark ink on a light one at equal alpha.
+    terrace: {
+      halo: {
+        subtle: { steps: 4, inkAlpha: 0.055, spread: 0.52, relief: 0.8, drift: 0.7 },
+        standard: { steps: 6, inkAlpha: 0.090, spread: 0.55, relief: 1.0, drift: 1.0 },
+        bold: { steps: 8, inkAlpha: 0.130, spread: 0.60, relief: 1.15, drift: 1.2 },
+      },
+      // Carbon carries slightly MORE alpha than the arithmetic would suggest: an 8-bit step of the same
+      // alpha lands a smaller absolute tone gap on the dark ground (measured 3/255 vs 4/255 at bold),
+      // so matching the numbers exactly would make the plateaus genuinely harder to see rather than
+      // just calmer. Still held under halo at every tier per Jon's dark-ground note.
+      carbon: {
+        subtle: { steps: 4, inkAlpha: 0.048, spread: 0.52, relief: 0.8, drift: 0.7 },
+        standard: { steps: 6, inkAlpha: 0.078, spread: 0.55, relief: 1.0, drift: 1.0 },
+        bold: { steps: 8, inkAlpha: 0.112, spread: 0.60, relief: 1.15, drift: 1.2 },
+      },
+    },
+
+    // ashlar (2026-07-30) — grid-set plates in depth-banded parallax. Tiers move plate COUNT, ink
+    // weight and parallax together so 'bold' is a denser, more active wall rather than just a darker
+    // one. triShare stays a minority so the apex-up triangles read as accents inside a rectilinear
+    // field. Carbon subtler than halo at every tier, same reason as terrace.
+    ashlar: {
+      halo: {
+        subtle: { plates: 7, inkAlpha: 0.055, drift: 0.7, triShare: 0.25 },
+        standard: { plates: 11, inkAlpha: 0.085, drift: 1.0, triShare: 0.30 },
+        bold: { plates: 16, inkAlpha: 0.120, drift: 1.25, triShare: 0.35 },
+      },
+      carbon: {
+        subtle: { plates: 7, inkAlpha: 0.040, drift: 0.7, triShare: 0.25 },
+        standard: { plates: 11, inkAlpha: 0.060, drift: 1.0, triShare: 0.30 },
+        bold: { plates: 16, inkAlpha: 0.090, drift: 1.25, triShare: 0.35 },
+      },
+    },
   };
 
   // Returns {} for unknown style/ground/preset combos rather than throwing — callers merge the

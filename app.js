@@ -24,7 +24,6 @@
     'quote': ['quote', 'attribution', 'role'],
     'carousel': ['beats'],
     'hot-take': ['statement'],
-    'stat': ['metric', 'support'],
     'event': ['title', 'date', 'cta'],
   };
   function isTextSlot(template, key) { return (TEXT_SLOTS[template] || []).indexOf(key) !== -1; }
@@ -72,6 +71,11 @@
     return b;
   }
 
+  // NOTE: every single-select chip row REPAINTS itself inside its own onPick (see the pickers below).
+  // renderChipRow paints the active state from `activeVal` at render time only, so without that
+  // repaint the highlight stays on the previously-active chip and the panel misreports the live state.
+  // Only the background row used to do this; the ratio/ground/logo/style/preset rows did not, which
+  // went unnoticed while style was a 2-chip choice.
   function renderChipRow(container, items, activeVal, onPick) {
     container.innerHTML = '';
     items.forEach(function (it) {
@@ -92,21 +96,21 @@
     renderChipRow(el('ratio-picker'),
       RATIO_KEYS.map(function (r) { return { label: labels[r] || r, value: r }; }),
       State.ratio,
-      function (r) { State.ratio = r; refresh(); });
+      function (r) { State.ratio = r; refresh(); buildRatioPicker(); });
   }
 
   function buildGroundPicker() {
     renderChipRow(el('ground-picker'),
       [{ label: 'Halo (light)', value: 'halo' }, { label: 'Carbon (dark)', value: 'carbon' }],
       State.ground,
-      function (g) { State.ground = g; refresh(); });
+      function (g) { State.ground = g; refresh(); buildGroundPicker(); });
   }
 
   function buildLogoPicker() {
     renderChipRow(el('logo-picker'),
       [{ label: 'Auto', value: 'auto' }, { label: 'Dark logo', value: 'dark' }, { label: 'Light logo', value: 'light' }],
       State.logo,
-      function (v) { State.logo = v; refresh(); });
+      function (v) { State.logo = v; refresh(); buildLogoPicker(); });
   }
 
   // Resolve the lockup ink. 'auto' picks correctly per background so the mark never sinks into it:
@@ -119,15 +123,23 @@
     return (State.ground === 'carbon') ? 'halo' : 'carbon';
   }
 
+  // The four procedural backgrounds. Keyline = drawn line (spiral ribbons), Fritzoid = ambient truchet
+  // tile field, Terrace = quantized contour plateaus, Ashlar = grid-set plates in depth parallax.
+  // Values are the spec's motion.style strings, validated by composition-spec.js's VALID_STYLES.
+  var STYLES = [
+    { label: 'Keyline', value: 'keyline' },
+    { label: 'Fritzoid', value: 'fritzoid' },
+    { label: 'Terrace', value: 'terrace' },
+    { label: 'Ashlar', value: 'ashlar' },
+  ];
+
   function buildStylePicker() {
-    renderChipRow(el('style-picker'),
-      [{ label: 'Keyline', value: 'keyline' }, { label: 'Fritzoid', value: 'fritzoid' }],
-      State.style,
-      function (s) { State.style = s; refresh(); });
+    renderChipRow(el('style-picker'), STYLES, State.style,
+      function (s) { State.style = s; refresh(); buildStylePicker(); });
     renderChipRow(el('preset-picker'),
       [{ label: 'Subtle', value: 'subtle' }, { label: 'Standard', value: 'standard' }, { label: 'Bold', value: 'bold' }],
       State.preset,
-      function (p) { State.preset = p; refresh(); });
+      function (p) { State.preset = p; refresh(); buildStylePicker(); });
   }
 
   function buildBgPicker() {

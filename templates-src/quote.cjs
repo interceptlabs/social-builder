@@ -42,7 +42,7 @@ const defaults = {
 // byte-identical for the frozen legacy fixtures/goldens) is never reached.
 const ZERO_FLOAT = { driftX: 0, driftY: 0, breathe: 0 };
 
-const VALID_STYLES = ['keyline', 'fritzoid'];
+const VALID_STYLES = ['keyline', 'fritzoid', 'terrace', 'ashlar'];
 const VALID_PRESETS = ['subtle', 'standard', 'bold'];
 const VALID_GROUNDS = ['halo', 'carbon'];
 // theme is the DARK-LEGIBLE knob for Quote over a dark backgroundVideo (v1.2.5, BG-VIDEO). Quote's

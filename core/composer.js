@@ -107,10 +107,41 @@
     return r.INTERCEPT_FRITZOID;
   }
 
+  // The two procedural backgrounds added 2026-07-30. Loaded through the SAME lazy dual
+  // require/root-global lookup as getFritzoid above, resolved at CALL time — so a page that only ever
+  // renders keyline (the frozen preview/index.html, any legacy-spec-only page) never has to load them.
+  // Each is background-only: they contribute no layer treatment, so drawLayers' keyline branch handles
+  // their content exactly as it does today.
+  const BG_STYLE_MODULES = {
+    terrace: { file: './terrace.js', global: 'INTERCEPT_TERRACE', build: 'buildTerrace', draw: 'drawTerraceAt' },
+    ashlar: { file: './ashlar.js', global: 'INTERCEPT_ASHLAR', build: 'buildAshlar', draw: 'drawAshlarAt' },
+  };
+
+  function getBgStyleModule(style) {
+    const d = BG_STYLE_MODULES[style];
+    if (!d) return null;
+    if (typeof module !== 'undefined' && module.exports) {
+      try { return require(d.file); }
+      catch (e) { throw new Error(`load src/${style}.js before composer.js`); }
+    }
+    const r = typeof self !== 'undefined' ? self : globalThis;
+    if (!r[d.global]) throw new Error(`load src/${style}.js before composer.js`);
+    return r[d.global];
+  }
+
   // Build the static look + geometry once per spec (independent of t).
   function buildComposer(spec) {
     const style = resolveStyle(spec);
     const m = mergeMotion(spec);
+
+    // terrace / ashlar: background-only styles. buildX resolves everything seeded + time-independent
+    // once; the merged motion `m` carries their scalars via mergeMotion's style-agnostic passthrough.
+    if (BG_STYLE_MODULES[style]) {
+      const d = BG_STYLE_MODULES[style];
+      const Mod = getBgStyleModule(style);
+      const state = Mod[d.build](spec, m);
+      return { spec, m, style, state };
+    }
 
     if (style === 'fritzoid') {
       const Fritzoid = getFritzoid();
@@ -162,6 +193,16 @@
     if (C.style === 'fritzoid') {
       const Fritzoid = getFritzoid();
       Fritzoid.drawFritzoidBackground(ctx, C.state, t);
+      return;
+    }
+    // terrace / ashlar are addressed in tN, not raw t: loopSec stays owned by the merged motion here
+    // (so the Transitions loop-duration slider retimes them for free) instead of being copied into
+    // each style's state. tN is the same pure-function-of-loop-position contract every other style and
+    // primitive in this file uses, which is what makes tN=1 reproduce tN=0 exactly.
+    if (BG_STYLE_MODULES[C.style]) {
+      const d = BG_STYLE_MODULES[C.style];
+      const Mod = getBgStyleModule(C.style);
+      Mod[d.draw](ctx, C.state, (t / C.m.speed.loopSec) % 1);
       return;
     }
     const { spec, m, look, ops, v } = C;

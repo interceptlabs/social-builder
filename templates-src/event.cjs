@@ -53,7 +53,7 @@ const PULSE = {
   date: { driftY: 6, harmonic: 3 },
 };
 
-const VALID_STYLES = ['keyline', 'fritzoid'];
+const VALID_STYLES = ['keyline', 'fritzoid', 'terrace', 'ashlar'];
 const VALID_PRESETS = ['subtle', 'standard', 'bold'];
 const VALID_GROUNDS = ['halo', 'carbon'];
 
