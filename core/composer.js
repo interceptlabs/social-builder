@@ -107,14 +107,16 @@
     return r.INTERCEPT_FRITZOID;
   }
 
-  // The two procedural backgrounds added 2026-07-30. Loaded through the SAME lazy dual
-  // require/root-global lookup as getFritzoid above, resolved at CALL time — so a page that only ever
-  // renders keyline (the frozen preview/index.html, any legacy-spec-only page) never has to load them.
-  // Each is background-only: they contribute no layer treatment, so drawLayers' keyline branch handles
-  // their content exactly as it does today.
+  // The two procedural backgrounds added 2026-07-30, both ported from the Fritz pattern generator's
+  // own overlap modes (intercept-brand-kit/.fritz/generators/fritz-pattern.html): `fan` is its
+  // "Fan (shared origin)" and `shingle` its "Shingle (roof tile)" laid over herringbone lean parity.
+  // Loaded through the SAME lazy dual require/root-global lookup as getFritzoid above, resolved at CALL
+  // time — so a page that only ever renders keyline (the frozen preview/index.html, any
+  // legacy-spec-only page) never has to load them. Each is background-only: they contribute no layer
+  // treatment, so drawLayers' keyline branch handles their content exactly as it does today.
   const BG_STYLE_MODULES = {
-    terrace: { file: './terrace.js', global: 'INTERCEPT_TERRACE', build: 'buildTerrace', draw: 'drawTerraceAt' },
-    ashlar: { file: './ashlar.js', global: 'INTERCEPT_ASHLAR', build: 'buildAshlar', draw: 'drawAshlarAt' },
+    fan: { file: './fan.js', global: 'INTERCEPT_FAN', build: 'buildFan', draw: 'drawFanAt' },
+    shingle: { file: './shingle.js', global: 'INTERCEPT_SHINGLE', build: 'buildShingle', draw: 'drawShingleAt' },
   };
 
   function getBgStyleModule(style) {
@@ -134,7 +136,7 @@
     const style = resolveStyle(spec);
     const m = mergeMotion(spec);
 
-    // terrace / ashlar: background-only styles. buildX resolves everything seeded + time-independent
+    // fan / shingle: background-only styles. buildX resolves everything seeded + time-independent
     // once; the merged motion `m` carries their scalars via mergeMotion's style-agnostic passthrough.
     if (BG_STYLE_MODULES[style]) {
       const d = BG_STYLE_MODULES[style];
@@ -195,7 +197,7 @@
       Fritzoid.drawFritzoidBackground(ctx, C.state, t);
       return;
     }
-    // terrace / ashlar are addressed in tN, not raw t: loopSec stays owned by the merged motion here
+    // fan / shingle are addressed in tN, not raw t: loopSec stays owned by the merged motion here
     // (so the Transitions loop-duration slider retimes them for free) instead of being copied into
     // each style's state. tN is the same pure-function-of-loop-position contract every other style and
     // primitive in this file uses, which is what makes tN=1 reproduce tN=0 exactly.

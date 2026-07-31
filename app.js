@@ -123,14 +123,16 @@
     return (State.ground === 'carbon') ? 'halo' : 'carbon';
   }
 
-  // The four procedural backgrounds. Keyline = drawn line (spiral ribbons), Fritzoid = ambient truchet
-  // tile field, Terrace = quantized contour plateaus, Ashlar = grid-set plates in depth parallax.
+  // The four procedural backgrounds, all four drawn from the Fritz pattern vocabulary. Keyline = the
+  // spiral line ribbons; the other three are the canonical apex-up triangle used three ways —
+  // Fritzoid = the generator's `truchet` tile field, Fan = its `ov-fan` (shared-origin burst),
+  // Shingle = its `ov-shingle` roof-tile courses over herringbone lean parity.
   // Values are the spec's motion.style strings, validated by composition-spec.js's VALID_STYLES.
   var STYLES = [
     { label: 'Keyline', value: 'keyline' },
     { label: 'Fritzoid', value: 'fritzoid' },
-    { label: 'Terrace', value: 'terrace' },
-    { label: 'Ashlar', value: 'ashlar' },
+    { label: 'Fan', value: 'fan' },
+    { label: 'Shingle', value: 'shingle' },
   ];
 
   function buildStylePicker() {

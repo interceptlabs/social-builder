@@ -49,43 +49,37 @@
       },
     },
 
-    // terrace (2026-07-30) — quantized contour plateaus. `steps` IS the brand's hard-edged-steps count
-    // and stays inside 3..9 at every tier; the preset tiers move the STEP COUNT and the ink weight
-    // together, because more plateaus at the same alpha would read as a smooth grade (exactly what the
-    // rule forbids). Carbon is held subtler than halo at every tier — the same structural correction
-    // keyline carries for Jon's 07-22 "ribbon too strong on dark" note: light ink on a dark ground
-    // reads hotter than dark ink on a light one at equal alpha.
-    terrace: {
+    // fan (2026-07-30) — the generator's "Fan (shared origin)" overlap mode. Tiers move the LAYER
+    // COUNT and ink weight together: more layers is a fuller fan, not just a darker one. `cell` shrinks
+    // as layers grow so a bold fan stays a rhythm rather than a wall. Carbon runs a touch lighter than
+    // halo at every tier — the channel hues sit hotter on a dark ground (Jon's 07-22 dark-ground note).
+    fan: {
       halo: {
-        subtle: { steps: 4, inkAlpha: 0.055, spread: 0.52, relief: 0.8, drift: 0.7 },
-        standard: { steps: 6, inkAlpha: 0.090, spread: 0.55, relief: 1.0, drift: 1.0 },
-        bold: { steps: 8, inkAlpha: 0.130, spread: 0.60, relief: 1.15, drift: 1.2 },
+        subtle: { cell: 230, layers: 3, alpha: 0.13, ovScale: 0.88, ovAlpha: 0.70, breathe: 0.16, waves: 1 },
+        standard: { cell: 190, layers: 5, alpha: 0.20, ovScale: 0.86, ovAlpha: 0.72, breathe: 0.22, waves: 1 },
+        bold: { cell: 155, layers: 6, alpha: 0.27, ovScale: 0.84, ovAlpha: 0.74, breathe: 0.30, waves: 2 },
       },
-      // Carbon carries slightly MORE alpha than the arithmetic would suggest: an 8-bit step of the same
-      // alpha lands a smaller absolute tone gap on the dark ground (measured 3/255 vs 4/255 at bold),
-      // so matching the numbers exactly would make the plateaus genuinely harder to see rather than
-      // just calmer. Still held under halo at every tier per Jon's dark-ground note.
       carbon: {
-        subtle: { steps: 4, inkAlpha: 0.048, spread: 0.52, relief: 0.8, drift: 0.7 },
-        standard: { steps: 6, inkAlpha: 0.078, spread: 0.55, relief: 1.0, drift: 1.0 },
-        bold: { steps: 8, inkAlpha: 0.112, spread: 0.60, relief: 1.15, drift: 1.2 },
+        subtle: { cell: 230, layers: 3, alpha: 0.11, ovScale: 0.88, ovAlpha: 0.70, breathe: 0.16, waves: 1 },
+        standard: { cell: 190, layers: 5, alpha: 0.17, ovScale: 0.86, ovAlpha: 0.72, breathe: 0.22, waves: 1 },
+        bold: { cell: 155, layers: 6, alpha: 0.23, ovScale: 0.84, ovAlpha: 0.74, breathe: 0.30, waves: 2 },
       },
     },
 
-    // ashlar (2026-07-30) — grid-set plates in depth-banded parallax. Tiers move plate COUNT, ink
-    // weight and parallax together so 'bold' is a denser, more active wall rather than just a darker
-    // one. triShare stays a minority so the apex-up triangles read as accents inside a rectilinear
-    // field. Carbon subtler than halo at every tier, same reason as terrace.
-    ashlar: {
+    // shingle (2026-07-30) — the generator's "Shingle (roof tile)" overlap mode over herringbone lean
+    // parity. Tiers move course DEPTH (layers), overlap (ovOffset) and ink weight together, so bold is
+    // a deeper, tighter-lapped course. Drift speed is fixed by the loop-seam maths (exactly two cells
+    // per loop, see shingle.js) and is deliberately NOT a preset knob.
+    shingle: {
       halo: {
-        subtle: { plates: 7, inkAlpha: 0.055, drift: 0.7, triShare: 0.25 },
-        standard: { plates: 11, inkAlpha: 0.085, drift: 1.0, triShare: 0.30 },
-        bold: { plates: 16, inkAlpha: 0.120, drift: 1.25, triShare: 0.35 },
+        subtle: { cell: 180, layers: 3, alpha: 0.12, ovOffset: 0.50, ovScale: 0.90, ovAlpha: 0.66 },
+        standard: { cell: 150, layers: 4, alpha: 0.18, ovOffset: 0.55, ovScale: 0.88, ovAlpha: 0.68 },
+        bold: { cell: 125, layers: 5, alpha: 0.25, ovOffset: 0.62, ovScale: 0.86, ovAlpha: 0.70 },
       },
       carbon: {
-        subtle: { plates: 7, inkAlpha: 0.040, drift: 0.7, triShare: 0.25 },
-        standard: { plates: 11, inkAlpha: 0.060, drift: 1.0, triShare: 0.30 },
-        bold: { plates: 16, inkAlpha: 0.090, drift: 1.25, triShare: 0.35 },
+        subtle: { cell: 180, layers: 3, alpha: 0.10, ovOffset: 0.50, ovScale: 0.90, ovAlpha: 0.66 },
+        standard: { cell: 150, layers: 4, alpha: 0.15, ovOffset: 0.55, ovScale: 0.88, ovAlpha: 0.68 },
+        bold: { cell: 125, layers: 5, alpha: 0.21, ovOffset: 0.62, ovScale: 0.86, ovAlpha: 0.70 },
       },
     },
   };
