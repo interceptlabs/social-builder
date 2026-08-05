@@ -49,37 +49,24 @@
       },
     },
 
-    // fan (2026-07-30) — the generator's "Fan (shared origin)" overlap mode. Tiers move the LAYER
-    // COUNT and ink weight together: more layers is a fuller fan, not just a darker one. `cell` shrinks
-    // as layers grow so a bold fan stays a rhythm rather than a wall. Carbon runs a touch lighter than
-    // halo at every tier — the channel hues sit hotter on a dark ground (Jon's 07-22 dark-ground note).
-    fan: {
+    // fritzfield (2026-08-04) — the Weekly Pulse deck's densely-packed Fritzoid library, animated.
+    // Values are lifted from the deck's QUIET sets (make_fritzoid_soft{,_halo}.py), which are the ones
+    // authored to sit behind copy: 10px cell, 1-4px gap, opacity 0.07-0.22. The two grounds are NOT
+    // symmetric — Carbon takes roughly 1.5x the opacity of Halo, and Halo runs a tighter gap, exactly
+    // as the shipped sets do. `pattern` / `palette` / `colorMode` / `animate` are USER choices, so they
+    // are deliberately absent here: a preset sets intensity only, and must never silently re-pick the
+    // design. Defaults for those live in fritzfield.js DEFAULTS (ov-nest / coolsweep-only, Jon's deck
+    // pick). Anything a preset omits falls through to those.
+    fritzfield: {
       halo: {
-        subtle: { cell: 230, layers: 3, alpha: 0.13, ovScale: 0.88, ovAlpha: 0.70, breathe: 0.16, waves: 1 },
-        standard: { cell: 190, layers: 5, alpha: 0.20, ovScale: 0.86, ovAlpha: 0.72, breathe: 0.22, waves: 1 },
-        bold: { cell: 155, layers: 6, alpha: 0.27, ovScale: 0.84, ovAlpha: 0.74, breathe: 0.30, waves: 2 },
+        subtle: { cell: 10, gap: 1, layers: 3, opacity: 0.07, ovAlpha: 0.78, ovScale: 0.85, amp: 0.40, waves: 1, bands: 14 },
+        standard: { cell: 10, gap: 1, layers: 4, opacity: 0.11, ovAlpha: 0.80, ovScale: 0.78, amp: 0.55, waves: 1, bands: 16 },
+        bold: { cell: 10, gap: 2, layers: 4, opacity: 0.16, ovAlpha: 0.85, ovScale: 0.72, amp: 0.65, waves: 2, bands: 18 },
       },
       carbon: {
-        subtle: { cell: 230, layers: 3, alpha: 0.11, ovScale: 0.88, ovAlpha: 0.70, breathe: 0.16, waves: 1 },
-        standard: { cell: 190, layers: 5, alpha: 0.17, ovScale: 0.86, ovAlpha: 0.72, breathe: 0.22, waves: 1 },
-        bold: { cell: 155, layers: 6, alpha: 0.23, ovScale: 0.84, ovAlpha: 0.74, breathe: 0.30, waves: 2 },
-      },
-    },
-
-    // shingle (2026-07-30) — the generator's "Shingle (roof tile)" overlap mode over herringbone lean
-    // parity. Tiers move course DEPTH (layers), overlap (ovOffset) and ink weight together, so bold is
-    // a deeper, tighter-lapped course. Drift speed is fixed by the loop-seam maths (exactly two cells
-    // per loop, see shingle.js) and is deliberately NOT a preset knob.
-    shingle: {
-      halo: {
-        subtle: { cell: 180, layers: 3, alpha: 0.12, ovOffset: 0.50, ovScale: 0.90, ovAlpha: 0.66 },
-        standard: { cell: 150, layers: 4, alpha: 0.18, ovOffset: 0.55, ovScale: 0.88, ovAlpha: 0.68 },
-        bold: { cell: 125, layers: 5, alpha: 0.25, ovOffset: 0.62, ovScale: 0.86, ovAlpha: 0.70 },
-      },
-      carbon: {
-        subtle: { cell: 180, layers: 3, alpha: 0.10, ovOffset: 0.50, ovScale: 0.90, ovAlpha: 0.66 },
-        standard: { cell: 150, layers: 4, alpha: 0.15, ovOffset: 0.55, ovScale: 0.88, ovAlpha: 0.68 },
-        bold: { cell: 125, layers: 5, alpha: 0.21, ovOffset: 0.62, ovScale: 0.86, ovAlpha: 0.70 },
+        subtle: { cell: 10, gap: 2, layers: 3, opacity: 0.11, ovAlpha: 0.80, ovScale: 0.85, amp: 0.40, waves: 1, bands: 14 },
+        standard: { cell: 10, gap: 2, layers: 4, opacity: 0.17, ovAlpha: 0.85, ovScale: 0.78, amp: 0.55, waves: 1, bands: 16 },
+        bold: { cell: 10, gap: 3, layers: 4, opacity: 0.24, ovAlpha: 0.88, ovScale: 0.72, amp: 0.65, waves: 2, bands: 18 },
       },
     },
   };

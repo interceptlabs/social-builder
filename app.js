@@ -34,6 +34,12 @@
     ground: 'halo',
     style: 'keyline',
     preset: 'standard',
+    // Fritz Field selections. Absent => fritzfield.js DEFAULTS (ov-nest / coolsweep-only / sweep —
+    // Jon's deck pick). These are DESIGN choices, so they survive a preset change; a preset only moves
+    // intensity.
+    pattern: 'ov-nest',
+    palette: 'coolsweep-only',
+    animate: 'sweep',
     logo: 'auto',         // lockup treatment: 'auto' (per background) | 'dark' | 'light'
     content: {},          // slot -> value (strings; 'json' fields hold parsed objects)
     colors: {},           // slot -> resolved brand hex (advanced control; absent = template default)
@@ -123,17 +129,29 @@
     return (State.ground === 'carbon') ? 'halo' : 'carbon';
   }
 
-  // The four procedural backgrounds, all four drawn from the Fritz pattern vocabulary. Keyline = the
-  // spiral line ribbons; the other three are the canonical apex-up triangle used three ways —
-  // Fritzoid = the generator's `truchet` tile field, Fan = its `ov-fan` (shared-origin burst),
-  // Shingle = its `ov-shingle` roof-tile courses over herringbone lean parity.
-  // Values are the spec's motion.style strings, validated by composition-spec.js's VALID_STYLES.
+  // Procedural backgrounds. Keyline = the spiral line ribbons; Fritzoid = the ambient truchet tile
+  // field; Fritz Field = the densely-packed Fritzoid pattern library from the Weekly Pulse deck, which
+  // carries all 17 of the generator's pattern modes behind its own Pattern / Palette / Animation
+  // pickers. Values are the spec's motion.style strings, validated by composition-spec.js.
   var STYLES = [
     { label: 'Keyline', value: 'keyline' },
     { label: 'Fritzoid', value: 'fritzoid' },
-    { label: 'Fan', value: 'fan' },
-    { label: 'Shingle', value: 'shingle' },
+    { label: 'Fritz Field', value: 'fritzfield' },
   ];
+
+  // Human labels for the generator's own mode names — the values must stay the generator's strings so
+  // a design can be moved between this app, the browser tool and the deck library by name.
+  var PATTERN_LABELS = {
+    'truchet': 'Truchet', 'pinwheel': 'Pinwheel', 'diamond': 'Diamond', 'herringbone': 'Herringbone',
+    'quilt': 'Quilt', 'scatter': 'Scatter', 'radial': 'Radial', 'wave': 'Wave',
+    'ov-stack': 'Stack', 'ov-fan': 'Fan', 'ov-nest': 'Nest', 'ov-mirror': 'Mirror', 'ov-cross': 'Cross',
+    'ov-shingle': 'Shingle', 'ov-weave': 'Weave', 'ov-cascade': 'Cascade', 'ov-kaleidoscope': 'Kaleidoscope',
+  };
+  var PALETTE_LABELS = {
+    'fritz': 'Fritz (3)', 'flarepop-only': 'Flarepop', 'wiretree-only': 'Wiretree',
+    'coolsweep-only': 'Coolsweep', 'hotcatch': 'Hotcatch', 'suedejacket': 'Suedejacket', 'deepfield': 'Deepfield',
+  };
+  var ANIMATE_LABELS = { 'still': 'Still', 'pulse': 'Pulse', 'sweep': 'Sweep', 'ripple': 'Ripple' };
 
   function buildStylePicker() {
     renderChipRow(el('style-picker'), STYLES, State.style,
@@ -142,6 +160,31 @@
       [{ label: 'Subtle', value: 'subtle' }, { label: 'Standard', value: 'standard' }, { label: 'Bold', value: 'bold' }],
       State.preset,
       function (p) { State.preset = p; refresh(); buildStylePicker(); });
+    buildFieldPickers();
+  }
+
+  // Pattern / Palette / Animation — only offered for Fritz Field, because they mean nothing to the
+  // other styles ("only offer what works").
+  function buildFieldPickers() {
+    var wrap = el('field-controls');
+    if (!wrap) return;
+    var on = State.style === 'fritzfield';
+    wrap.classList.toggle('hidden', !on);
+    if (!on) return;
+    var FF = window.INTERCEPT_FRITZFIELD;
+    if (!FF) return;
+    renderChipRow(el('pattern-picker'),
+      FF.PATTERNS.map(function (v) { return { label: PATTERN_LABELS[v] || v, value: v }; }),
+      State.pattern,
+      function (v) { State.pattern = v; refresh(); buildFieldPickers(); });
+    renderChipRow(el('palette-picker'),
+      FF.PALETTE_KEYS.map(function (v) { return { label: PALETTE_LABELS[v] || v, value: v }; }),
+      State.palette,
+      function (v) { State.palette = v; refresh(); buildFieldPickers(); });
+    renderChipRow(el('animate-picker'),
+      FF.ANIMATIONS.map(function (v) { return { label: ANIMATE_LABELS[v] || v, value: v }; }),
+      State.animate,
+      function (v) { State.animate = v; refresh(); buildFieldPickers(); });
   }
 
   function buildBgPicker() {
@@ -495,7 +538,14 @@
     // an image when the user chose light text.
     var darkText = State.bgLoopId || (State.bgImage && State.bgImage.ink === 'light');
     if (darkText) { opts.theme = 'dark'; slots.theme = 'dark'; }
+    // Fritz Field design choices ride motion as style-specific passthrough fields (the same mechanism
+    // fritzoid's tileBase/inkAlpha use), so expand() needs no per-style knowledge.
     var spec = safeExpand(State.templateName, slots, opts);
+    if (State.style === 'fritzfield') {
+      spec.motion.pattern = State.pattern;
+      spec.motion.palette = State.palette;
+      spec.motion.animate = State.animate;
+    }
     if (State.bgLoopId) spec.backgroundVideo = { loop: State.bgLoopId, opacity: State.bgOpacity };
     if (State.bgImage) spec.backgroundImage = { src: State.bgImage.url, fit: State.bgImage.fit || 'cover' };
     applyTimingOverrides(spec);

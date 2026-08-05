@@ -42,7 +42,7 @@ const defaults = {
 // BACKGROUND, not per-layer float and not any foreground accent element.
 const ZERO_FLOAT = { driftX: 0, driftY: 0, breathe: 0 };
 
-const VALID_STYLES = ['keyline', 'fritzoid', 'fan', 'shingle'];
+const VALID_STYLES = ['keyline', 'fritzoid', 'fritzfield'];
 const VALID_PRESETS = ['subtle', 'standard', 'bold'];
 const VALID_GROUNDS = ['halo', 'carbon'];
 

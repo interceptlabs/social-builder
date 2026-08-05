@@ -107,16 +107,17 @@
     return r.INTERCEPT_FRITZOID;
   }
 
-  // The two procedural backgrounds added 2026-07-30, both ported from the Fritz pattern generator's
-  // own overlap modes (intercept-brand-kit/.fritz/generators/fritz-pattern.html): `fan` is its
-  // "Fan (shared origin)" and `shingle` its "Shingle (roof tile)" laid over herringbone lean parity.
+  // `fritzfield` (2026-08-04) — the densely-packed Fritzoid pattern library used for the Weekly Pulse
+  // deck backgrounds, animated and loop-safe. One style carrying all 17 of the generator's pattern modes
+  // (8 grid + 9 overlay) x 7 palettes x 7 colour modes x 4 animators, selected via motion.pattern /
+  // .palette / .colorMode / .animate. Replaces the hand-rolled `fan` and `shingle`, which were two of
+  // those same overlay modes at ~15x too coarse a cell to read as a Fritzoid field.
   // Loaded through the SAME lazy dual require/root-global lookup as getFritzoid above, resolved at CALL
   // time — so a page that only ever renders keyline (the frozen preview/index.html, any
   // legacy-spec-only page) never has to load them. Each is background-only: they contribute no layer
   // treatment, so drawLayers' keyline branch handles their content exactly as it does today.
   const BG_STYLE_MODULES = {
-    fan: { file: './fan.js', global: 'INTERCEPT_FAN', build: 'buildFan', draw: 'drawFanAt' },
-    shingle: { file: './shingle.js', global: 'INTERCEPT_SHINGLE', build: 'buildShingle', draw: 'drawShingleAt' },
+    fritzfield: { file: './fritzfield.js', global: 'INTERCEPT_FRITZFIELD', build: 'buildFritzField', draw: 'drawFritzFieldAt' },
   };
 
   function getBgStyleModule(style) {
@@ -136,7 +137,7 @@
     const style = resolveStyle(spec);
     const m = mergeMotion(spec);
 
-    // fan / shingle: background-only styles. buildX resolves everything seeded + time-independent
+    // fritzfield: a background-only style. buildX resolves everything seeded + time-independent
     // once; the merged motion `m` carries their scalars via mergeMotion's style-agnostic passthrough.
     if (BG_STYLE_MODULES[style]) {
       const d = BG_STYLE_MODULES[style];
@@ -197,7 +198,7 @@
       Fritzoid.drawFritzoidBackground(ctx, C.state, t);
       return;
     }
-    // fan / shingle are addressed in tN, not raw t: loopSec stays owned by the merged motion here
+    // fritzfield is addressed in tN, not raw t: loopSec stays owned by the merged motion here
     // (so the Transitions loop-duration slider retimes them for free) instead of being copied into
     // each style's state. tN is the same pure-function-of-loop-position contract every other style and
     // primitive in this file uses, which is what makes tN=1 reproduce tN=0 exactly.

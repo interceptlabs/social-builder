@@ -42,6 +42,14 @@
       <h2>Motion</h2>
       <div id="style-picker" class="chips"></div>
       <div id="preset-picker" class="chips subtle"></div>
+      <div id="field-controls" class="hidden">
+        <span class="field-label">Pattern</span>
+        <div id="pattern-picker" class="chips subtle"></div>
+        <span class="field-label">Palette</span>
+        <div id="palette-picker" class="chips subtle"></div>
+        <span class="field-label">Animation</span>
+        <div id="animate-picker" class="chips subtle"></div>
+      </div>
     </section>
 
     <section class="group">
@@ -101,8 +109,7 @@
 <script src="core/motion-presets.js"></script>
 <!-- procedural background styles — each must load BEFORE composer.js (it looks them up by global) -->
 <script src="core/fritzoid.js"></script>
-<script src="core/fan.js"></script>
-<script src="core/shingle.js"></script>
+<script src="core/fritzfield.js"></script>
 <script src="core/composer.js"></script>
 <!-- vendored WebCodecs -> mp4 muxer (global Mp4Muxer) -->
 <script src="vendor/mp4-muxer.min.js"></script>

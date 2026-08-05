@@ -52,7 +52,7 @@ function resizeBeats(beats, n) {
   return out;
 }
 
-const VALID_STYLES = ['keyline', 'fritzoid', 'fan', 'shingle'];
+const VALID_STYLES = ['keyline', 'fritzoid', 'fritzfield'];
 const VALID_PRESETS = ['subtle', 'standard', 'bold'];
 const VALID_GROUNDS = ['halo', 'carbon'];
 
