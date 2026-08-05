@@ -44,6 +44,8 @@
     // floor, 15 the ceiling. Past ~15 a 'densely packed field' stops being dense and starts being a
     // tiled motif, which is a different thing and not what this style is for.
     fieldCell: 10,
+    // Fritzoid's three real knobs, previously reachable only by editing a spec by hand.
+    fzTile: 84, fzWaves: 2, fzInk: 0.10,
     logo: 'auto',         // lockup treatment: 'auto' (per background) | 'dark' | 'light'
     content: {},          // slot -> value (strings; 'json' fields hold parsed objects)
     colors: {},           // slot -> resolved brand hex (advanced control; absent = template default)
@@ -176,10 +178,40 @@
   function syncProceduralVisibility() {
     var pc = el('procedural-controls');
     if (pc) pc.classList.toggle('hidden', !!(State.bgLoopId || State.bgVideoFile || State.bgImage));
+    var fz = el('fritzoid-controls');
+    if (fz && State.style !== 'fritzoid') fz.classList.add('hidden');
+  }
+
+  // Fritzoid's own controls. It is locked ink-only (Jon, 07-29: the coloured glitch was removed), so it
+  // gets no palette — its variables are the tile module, how many flip waves cross the field per loop,
+  // and how hard the ink sits. Those were always in the spec; they just had no UI.
+  function buildFritzoidControls() {
+    var wrap = el('fritzoid-controls');
+    if (!wrap) return;
+    wrap.classList.toggle('hidden', State.style !== 'fritzoid');
+    if (State.style !== 'fritzoid') return;
+    [['fz-tile', 'fzTile', function (v) { return v + 'px'; }, function (v) { return parseInt(v, 10); }],
+     ['fz-waves', 'fzWaves', function (v) { return String(v); }, function (v) { return parseInt(v, 10); }],
+     ['fz-ink', 'fzInk', function (v) { return Number(v).toFixed(2); }, function (v) { return parseFloat(v); }]
+    ].forEach(function (d) {
+      var input = el(d[0]), out = el(d[0] + '-val');
+      if (!input) return;
+      if (!input.__wired) {
+        input.__wired = true;
+        input.addEventListener('input', function () {
+          State[d[1]] = d[3](input.value);
+          if (out) out.textContent = d[2](State[d[1]]);
+          scheduleRefresh();
+        });
+      }
+      input.value = String(State[d[1]]);
+      if (out) out.textContent = d[2](State[d[1]]);
+    });
   }
 
   function buildFieldPickers() {
     syncProceduralVisibility();
+    buildFritzoidControls();
     var wrap = el('field-controls');
     if (!wrap) return;
     var on = State.style === 'fritzfield';
@@ -587,6 +619,11 @@
       spec.motion.animate = State.animate;
       // Explicit user choice — set AFTER expand so it wins over the preset's own `cell`.
       spec.motion.cell = State.fieldCell;
+    }
+    if (State.style === 'fritzoid') {
+      spec.motion.tileBase = State.fzTile;
+      spec.motion.wavesPerLoop = State.fzWaves;
+      spec.motion.inkAlpha = State.fzInk;
     }
     if (State.bgVideoFile) spec.backgroundVideo = { src: State.bgVideoFile.url, opacity: State.bgOpacity };
     if (State.bgLoopId) spec.backgroundVideo = { loop: State.bgLoopId, opacity: State.bgOpacity };

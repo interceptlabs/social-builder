@@ -84,7 +84,19 @@
   const PATTERNS = GRID_PATTERNS.concat(OVERLAY_PATTERNS);
 
   const COLOR_MODES = ['random', 'per-layer', 'row', 'col', 'diagonal', 'radial', 'checker'];
-  const ANIMATIONS = ['still', 'pulse', 'sweep', 'ripple'];
+  // Four ALPHA animators (the lattice holds still, light moves over it) and three GEOMETRIC ones (the
+  // marks themselves move). The geometric set is what fritzoid had and this engine did not: fritzoid's
+  // one real idea is that its tiles physically flip lean as waves cross the field, which reads as the
+  // pattern being alive rather than lit. Doing it per BAND rather than per cell keeps the precompiled
+  // geometry valid — see the header — and a band is a legible unit at 10px, so a travelling flip reads
+  // as a shear running through the lattice instead of noise.
+  const ALPHA_ANIMATIONS = ['still', 'pulse', 'sweep', 'ripple'];
+  // 'bloom' (a per-band swell) was tried and CUT: the bands are diagonal stripes, so scaling one about
+  // any centre pulls it away from its neighbours and tears hard gaps through the lattice, exposing the
+  // ground. It rendered as a broken frame rather than a breath. Scaling the MARKS instead of the band
+  // would need the geometry re-pathed per frame, which is exactly what the precompile exists to avoid.
+  const GEOMETRIC_ANIMATIONS = ['flip', 'shear'];
+  const ANIMATIONS = ALPHA_ANIMATIONS.concat(GEOMETRIC_ANIMATIONS);
 
   const DEFAULTS = {
     pattern: 'ov-nest',
@@ -104,6 +116,9 @@
     animate: 'sweep',
     bands: 16,
     amp: 0.55,
+    // Geometric animators: travel is a fraction of a cell, swell a fraction of scale. Kept small — the
+    // point is a lattice that breathes, not marks that fly around.
+    travel: 0.9,
     waves: 1,          // INTEGER — this is what makes the seam exact
   };
 
@@ -221,16 +236,22 @@
     }
 
     // buckets[li][band][colour] = array of flat triangle coords
-    const buckets = [];
-    for (let li = 0; li < layers; li++) {
-      const byBand = [];
-      for (let b = 0; b < nBands; b++) {
-        const byColor = [];
-        for (let k = 0; k < pal.length; k++) byColor.push([]);
-        byBand.push(byColor);
+    const needFlip = (animate === 'flip');
+    function emptyBuckets() {
+      const out = [];
+      for (let li = 0; li < layers; li++) {
+        const byBand = [];
+        for (let b = 0; b < nBands; b++) {
+          const byColor = [];
+          for (let k = 0; k < pal.length; k++) byColor.push([]);
+          byBand.push(byColor);
+        }
+        out.push(byBand);
       }
-      buckets.push(byBand);
+      return out;
     }
+    const buckets = emptyBuckets();
+    const flipBuckets = needFlip ? emptyBuckets() : null;
 
     for (let li = 0; li < layers; li++) {
       for (let r = 0; r < rows; r++) {
@@ -244,9 +265,18 @@
             lcx = cx + t[0]; lcy = cy + t[1]; sc = scale * t[2]; d = t[3];
           }
           const ci = colorIdx(colorMode, c, r, cols, rows, li, pal.length, seed);
+          const b = bandOf(lcx, lcy);
           const v = triVerts(cell, d);
-          const arr = buckets[li][bandOf(lcx, lcy)][ci];
+          const arr = buckets[li][b][ci];
           for (let k = 0; k < 3; k++) { arr.push(lcx + v[k][0] * sc, lcy + v[k][1] * sc); }
+          if (needFlip) {
+            // The MIRRORED lattice, precompiled alongside. `flip` crossfades a band between the two,
+            // which is a real lean change (the mark mirrors) rather than a fade — and it costs one extra
+            // path set instead of re-pathing 32k triangles per frame.
+            const vf = triVerts(cell, d === 'right' ? 'left' : 'right');
+            const arrF = flipBuckets[li][b][ci];
+            for (let k = 0; k < 3; k++) { arrF.push(lcx + vf[k][0] * sc, lcy + vf[k][1] * sc); }
+          }
         }
       }
     }
@@ -254,7 +284,7 @@
     // Compile to Path2D where available (the browser, and node-canvas builds that support it); keep the
     // raw coords otherwise so this module never hard-depends on Path2D existing.
     const hasPath2D = (typeof Path2D === 'function');
-    const paths = buckets.map(function (byBand) {
+    const compile = function (byBand) {
       return byBand.map(function (byColor) {
         return byColor.map(function (coords) {
           if (!coords.length) return null;
@@ -269,7 +299,9 @@
           return p;
         });
       });
-    });
+    };
+    const paths = buckets.map(compile);
+    const flipPaths = flipBuckets ? flipBuckets.map(compile) : null;
 
     return {
       W, H, ground, bg: (spec.bg === 'graphite') ? GRAPHITE : (ground === 'carbon' ? CARBON : HALO),
@@ -277,6 +309,10 @@
       cell, gap, layers, opacity, ovAlpha, nBands, hasPath2D, paths,
       amp: num(m.amp, DEFAULTS.amp),
       waves: int(m.waves, 1, 6, DEFAULTS.waves),
+      travel: num(m.travel, DEFAULTS.travel),
+      flipPaths,
+      // Unit vector along the canon diagonal — `shear` slides bands along the mark's own angle.
+      ux: 1 / Math.hypot(1, CANON_SLOPE), uy: -CANON_SLOPE / Math.hypot(1, CANON_SLOPE),
       // Layer 0 is always source-over (as in the python). Layers 1+ take the blend; the two grounds
       // want opposite things, so the default is ground-derived rather than a single constant.
       blend: m.blend || (ground === 'carbon' ? 'screen' : 'source-over'),
@@ -285,9 +321,13 @@
 
   // Per-band alpha multiplier. Every form is cos(2*PI*waves*tN + phase) with INTEGER waves, so it is
   // identical at tN=0 and tN=1 — the loop seam holds by construction, for every animator.
+  // Per-band phase — shared by every animator so they all travel along the canon diagonal in step.
+  function bandPhase(state, b) { return TAU * (b / state.nBands); }
+
   function bandGain(state, b, tN) {
     const a = state.amp;
-    if (state.animate === 'still' || a === 0) return 1;
+    // The geometric animators move the marks, not the light, so they hold a flat alpha.
+    if (state.animate === 'still' || a === 0 || GEOMETRIC_ANIMATIONS.indexOf(state.animate) !== -1) return 1;
     const w = TAU * state.waves * tN;
     if (state.animate === 'pulse') return 1 + a * Math.cos(w);
     if (state.animate === 'sweep') return 1 + a * Math.cos(w - TAU * (b / state.nBands));
@@ -313,26 +353,50 @@
         const gain = bandGain(state, b, tN);
         const a = layerAlpha * gain;
         if (a <= 0.004) continue;
-        ctx.globalAlpha = Math.min(1, a);
-        for (let ci = 0; ci < pal.length; ci++) {
-          const p = paths[li][b][ci];
-          if (!p) continue;
-          ctx.fillStyle = pal[ci];
-          if (state.hasPath2D) { ctx.fill(p); continue; }
-          ctx.beginPath();
-          for (let i = 0; i < p.length; i += 6) {
-            ctx.moveTo(p[i], p[i + 1]);
-            ctx.lineTo(p[i + 2], p[i + 3]);
-            ctx.lineTo(p[i + 4], p[i + 5]);
-            ctx.closePath();
-          }
-          ctx.fill();
+
+        // GEOMETRIC animators. Each is A*sin/cos(2*PI*waves*tN + bandPhase) with an INTEGER waves, so
+        // every band is back exactly where it started at tN=1 and the seam holds — the same guarantee
+        // the alpha animators rely on, just applied to a transform instead of an alpha.
+        const w = TAU * state.waves * tN + bandPhase(state, b);
+        let mix = 0, shifted = false;
+        if (state.animate === 'shear') {
+          // slide the band along the canon diagonal
+          const d = state.cell * state.travel * Math.sin(w);
+          ctx.save();
+          ctx.translate(state.ux * d, state.uy * d);
+          shifted = true;
+        } else if (state.animate === 'flip' && state.flipPaths) {
+          // 0 = base lean, 1 = mirrored. Crossfading the two precompiled lattices reads as the marks
+          // turning over, which is fritzoid's one real idea, at this engine's density and cost.
+          mix = 0.5 - 0.5 * Math.cos(w);
         }
+
+        ctx.globalAlpha = Math.min(1, a * (1 - mix));
+        for (let ci = 0; ci < pal.length; ci++) fillBucket(ctx, state, paths[li][b][ci], pal[ci]);
+        if (mix > 0.004) {
+          ctx.globalAlpha = Math.min(1, a * mix);
+          for (let ci = 0; ci < pal.length; ci++) fillBucket(ctx, state, state.flipPaths[li][b][ci], pal[ci]);
+        }
+        if (shifted) ctx.restore();
       }
     }
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
     ctx.restore();
+  }
+
+  function fillBucket(ctx, state, p, colour) {
+    if (!p) return;
+    ctx.fillStyle = colour;
+    if (state.hasPath2D) { ctx.fill(p); return; }
+    ctx.beginPath();
+    for (let i = 0; i < p.length; i += 6) {
+      ctx.moveTo(p[i], p[i + 1]);
+      ctx.lineTo(p[i + 2], p[i + 3]);
+      ctx.lineTo(p[i + 4], p[i + 5]);
+      ctx.closePath();
+    }
+    ctx.fill();
   }
 
   function drawFritzFieldBackground(ctx, state, t) {
@@ -342,6 +406,7 @@
   return {
     buildFritzField, drawFritzFieldAt, drawFritzFieldBackground,
     PATTERNS, GRID_PATTERNS, OVERLAY_PATTERNS, PALETTES, PALETTE_KEYS, COLOR_MODES, ANIMATIONS,
+    ALPHA_ANIMATIONS, GEOMETRIC_ANIMATIONS,
     DEFAULTS, CANON_SLOPE, triVerts, ns,
   };
 });

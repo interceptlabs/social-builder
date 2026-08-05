@@ -67,6 +67,23 @@
           <div id="style-picker" class="chips"></div>
           <span class="field-label">Intensity</span>
           <div id="preset-picker" class="chips subtle"></div>
+          <div id="fritzoid-controls" class="hidden">
+            <div class="slider-row wide">
+              <label for="fz-tile">Tile size</label>
+              <input type="range" id="fz-tile" min="40" max="160" step="4" value="84">
+              <output id="fz-tile-val" class="mono">84px</output>
+            </div>
+            <div class="slider-row wide">
+              <label for="fz-waves">Flip waves / loop</label>
+              <input type="range" id="fz-waves" min="1" max="5" step="1" value="2">
+              <output id="fz-waves-val" class="mono">2</output>
+            </div>
+            <div class="slider-row wide">
+              <label for="fz-ink">Ink weight</label>
+              <input type="range" id="fz-ink" min="0.02" max="0.22" step="0.01" value="0.10">
+              <output id="fz-ink-val" class="mono">0.10</output>
+            </div>
+          </div>
           <div id="field-controls" class="hidden">
             <span class="field-label">Pattern</span>
             <div id="pattern-picker" class="chips subtle"></div>
