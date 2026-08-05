@@ -66,7 +66,8 @@
   function buildFritzoid(spec, resolved) {
     resolved = resolved || {};
     const W = spec.size.w, H = spec.size.h;
-    const ground = spec.bg === 'carbon' ? 'carbon' : 'halo';
+    // graphite is a GREY carbon — same dark-ground ink set, different fill (see VALID_GROUNDS).
+    const ground = (spec.bg === 'carbon' || spec.bg === 'graphite') ? 'carbon' : 'halo';
     const loopSec = (resolved.speed && resolved.speed.loopSec) || 8;
     const seed = (resolved.seed != null ? resolved.seed : 11) >>> 0;
     const tileBase = resolved.tileBase || 84;
@@ -75,7 +76,7 @@
 
     const rand = E.rng(seed);
     const inks = ground === 'carbon' ? CARBON_INKS : HALO_INKS;
-    const groundColor = ground === 'carbon' ? '#0a0a0f' : '#ffffff';
+    const groundColor = (spec.bg === 'graphite') ? '#26262d' : (ground === 'carbon' ? '#0a0a0f' : '#ffffff');
 
     // -- 1. Designed clusters (dominant ~40% of frame + 1-2 satellites) + a clear center copy
     //    zone, mirroring the keyline's designed-cluster philosophy (Jon's brief: "designed

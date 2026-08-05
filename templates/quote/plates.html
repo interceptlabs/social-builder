@@ -19,7 +19,7 @@
   (function () {
     var params = new URLSearchParams(location.search);
     var g = params.get('ground');
-    if (g === 'carbon') document.documentElement.classList.add('ground-carbon');
+    if (g === 'carbon' || g === 'graphite') document.documentElement.classList.add('ground-carbon');
     var ink = params.get('lockupInk');
     if (ink === 'carbon' || ink === 'halo') document.documentElement.classList.add('lockup-ink-' + ink);
     // theme=dark (v1.2.5, BG-VIDEO) — the on-dark palette so Quote is legible over a dark

@@ -40,6 +40,10 @@
     pattern: 'ov-nest',
     palette: 'coolsweep-only',
     animate: 'sweep',
+    // Fritzoid mark size in px at 1080. Deliberately a NARROW range: 10 is the deck's spec and the
+    // floor, 15 the ceiling. Past ~15 a 'densely packed field' stops being dense and starts being a
+    // tiled motif, which is a different thing and not what this style is for.
+    fieldCell: 10,
     logo: 'auto',         // lockup treatment: 'auto' (per background) | 'dark' | 'light'
     content: {},          // slot -> value (strings; 'json' fields hold parsed objects)
     colors: {},           // slot -> resolved brand hex (advanced control; absent = template default)
@@ -51,6 +55,7 @@
     bgLoopId: null,       // null = procedural background
     bgOpacity: 0.32,
     bgImage: null,        // { url, fit:'cover'|'contain', ink:'light'|'dark' } | null
+    bgVideoFile: null,    // { url, name } for a USER-UPLOADED loop (vs bgLoopId = a bundled one)
     photoOriginal: null,  // last uploaded photo (data URL), pre-matting
     matteOn: false,       // remove-background toggle for photo templates
     spec: null,
@@ -107,7 +112,7 @@
 
   function buildGroundPicker() {
     renderChipRow(el('ground-picker'),
-      [{ label: 'Halo (light)', value: 'halo' }, { label: 'Carbon (dark)', value: 'carbon' }],
+      [{ label: 'Halo', value: 'halo' }, { label: 'Graphite', value: 'graphite' }, { label: 'Carbon', value: 'carbon' }],
       State.ground,
       function (g) { State.ground = g; refresh(); buildGroundPicker(); });
   }
@@ -124,7 +129,7 @@
   function resolveLogoInk() {
     if (State.logo === 'dark') return 'carbon';
     if (State.logo === 'light') return 'halo';
-    if (State.bgLoopId) return 'halo';
+    if (State.bgLoopId || State.bgVideoFile) return 'halo';
     if (State.bgImage) return (State.bgImage.ink === 'light') ? 'halo' : 'carbon';
     return (State.ground === 'carbon') ? 'halo' : 'carbon';
   }
@@ -165,7 +170,16 @@
 
   // Pattern / Palette / Animation — only offered for Fritz Field, because they mean nothing to the
   // other styles ("only offer what works").
+  // The procedural style is SKIPPED entirely when a video or image background is present (the composer
+  // leaves the frame transparent and the media shows through), so offering its controls then would be
+  // offering something that does nothing — hide the whole block instead. "Only offer what works."
+  function syncProceduralVisibility() {
+    var pc = el('procedural-controls');
+    if (pc) pc.classList.toggle('hidden', !!(State.bgLoopId || State.bgVideoFile || State.bgImage));
+  }
+
   function buildFieldPickers() {
+    syncProceduralVisibility();
     var wrap = el('field-controls');
     if (!wrap) return;
     var on = State.style === 'fritzfield';
@@ -185,16 +199,31 @@
       FF.ANIMATIONS.map(function (v) { return { label: ANIMATE_LABELS[v] || v, value: v }; }),
       State.animate,
       function (v) { State.animate = v; refresh(); buildFieldPickers(); });
+    var cell = el('field-cell'), cellOut = el('field-cell-val');
+    if (cell && !cell.__wired) {
+      cell.__wired = true;
+      cell.addEventListener('input', function () {
+        State.fieldCell = parseInt(cell.value, 10) || 10;
+        if (cellOut) cellOut.textContent = State.fieldCell + 'px';
+        scheduleRefresh();
+      });
+    }
+    if (cell) cell.value = String(State.fieldCell);
+    if (cellOut) cellOut.textContent = State.fieldCell + 'px';
   }
 
   function buildBgPicker() {
     var items = [{ label: 'None (procedural)', value: '__none__' }];
     BG_MANIFEST.loops.forEach(function (l) { items.push({ label: l.label, value: l.id }); });
+    items.push({ label: 'Video…', value: '__video__' });
     items.push({ label: 'Image…', value: '__image__' });
-    var active = State.bgImage ? '__image__' : (State.bgLoopId || '__none__');
+    var active = State.bgImage ? '__image__' : (State.bgVideoFile ? '__video__' : (State.bgLoopId || '__none__'));
     renderChipRow(el('bg-picker'), items, active, function (v) {
-      if (v === '__image__') { el('bg-image-file').click(); return; } // state changes once a file is chosen
+      // The two upload chips only open the picker; state changes once a file is actually chosen.
+      if (v === '__image__') { el('bg-image-file').click(); return; }
+      if (v === '__video__') { el('bg-video-file').click(); return; }
       State.bgImage = null;
+      releaseVideoFile();
       State.bgLoopId = (v === '__none__') ? null : v;
       var loop = BG_MANIFEST.loops.filter(function (l) { return l.id === State.bgLoopId; })[0];
       if (loop && loop.defaultOpacity != null) { State.bgOpacity = loop.defaultOpacity; el('bg-opacity').value = String(loop.defaultOpacity); el('bg-opacity-val').textContent = loop.defaultOpacity.toFixed(2); }
@@ -203,6 +232,17 @@
       refresh();
       buildBgPicker(); // reflect active state
     });
+    syncProceduralVisibility();
+  }
+
+  // Object URLs for an uploaded loop are revoked when it is replaced or cleared — without this every
+  // upload leaks the whole file for the life of the page.
+  function releaseVideoFile() {
+    if (State.bgVideoFile && State.bgVideoFile.url) {
+      try { URL.revokeObjectURL(State.bgVideoFile.url); } catch (e) {}
+    }
+    State.bgVideoFile = null;
+    var st = el('bg-media-status'); if (st) st.textContent = '';
   }
 
   function buildImageControls() {
@@ -536,7 +576,7 @@
     var opts = { style: State.style, preset: State.preset, ratio: State.ratio, ground: State.ground };
     // On-dark text treatment where the template supports it (Quote): always over a video loop, and over
     // an image when the user chose light text.
-    var darkText = State.bgLoopId || (State.bgImage && State.bgImage.ink === 'light');
+    var darkText = State.bgLoopId || State.bgVideoFile || (State.bgImage && State.bgImage.ink === 'light');
     if (darkText) { opts.theme = 'dark'; slots.theme = 'dark'; }
     // Fritz Field design choices ride motion as style-specific passthrough fields (the same mechanism
     // fritzoid's tileBase/inkAlpha use), so expand() needs no per-style knowledge.
@@ -545,7 +585,10 @@
       spec.motion.pattern = State.pattern;
       spec.motion.palette = State.palette;
       spec.motion.animate = State.animate;
+      // Explicit user choice — set AFTER expand so it wins over the preset's own `cell`.
+      spec.motion.cell = State.fieldCell;
     }
+    if (State.bgVideoFile) spec.backgroundVideo = { src: State.bgVideoFile.url, opacity: State.bgOpacity };
     if (State.bgLoopId) spec.backgroundVideo = { loop: State.bgLoopId, opacity: State.bgOpacity };
     if (State.bgImage) spec.backgroundImage = { src: State.bgImage.url, fit: State.bgImage.fit || 'cover' };
     applyTimingOverrides(spec);
@@ -911,9 +954,13 @@
   function manageBg(spec) {
     var v = el('bg-video'), img = el('bg-image');
     if (spec.backgroundVideo) {
-      var wanted = 'assets/backgrounds/' + spec.backgroundVideo.loop + '.mp4';
-      if (v.getAttribute('data-loop') !== spec.backgroundVideo.loop) {
-        v.src = wanted; v.setAttribute('data-loop', spec.backgroundVideo.loop);
+      // Two sources: a BUNDLED loop (by id, resolved to assets/backgrounds/<id>.mp4) or a user UPLOAD
+      // (an object URL carried on spec.backgroundVideo.src). Keyed by the same data-loop attribute so
+      // the element is only re-loaded when the source actually changes.
+      var key = spec.backgroundVideo.src || spec.backgroundVideo.loop;
+      var wanted = spec.backgroundVideo.src || ('assets/backgrounds/' + spec.backgroundVideo.loop + '.mp4');
+      if (v.getAttribute('data-loop') !== key) {
+        v.src = wanted; v.setAttribute('data-loop', key);
         v.load();
       }
       v.style.opacity = String(spec.backgroundVideo.opacity);
@@ -1033,12 +1080,43 @@
     el('export-mp4').addEventListener('click', doExportMp4);
     el('export-poster').addEventListener('click', doExportPoster);
 
+    el('bg-video-file').addEventListener('change', function () {
+      var f = this.files && this.files[0]; this.value = '';
+      if (!f) return;
+      releaseVideoFile();
+      State.bgVideoFile = { url: URL.createObjectURL(f), name: f.name };
+      State.bgLoopId = null;
+      State.bgImage = null;
+      el('bg-opacity-wrap').classList.remove('hidden');   // an uploaded loop takes the same opacity control
+      el('bg-image-controls').classList.add('hidden');
+      var st = el('bg-media-status');
+      if (st) st.textContent = f.name + ' · ' + (f.size / 1e6).toFixed(1) + ' MB';
+      buildBgPicker();
+      refresh();
+    });
+
+    // Disclosure sections. Open state persists per section so the panel comes back the way it was left.
+    Array.prototype.forEach.call(document.querySelectorAll('.sec-head'), function (h) {
+      var sec = h.parentNode, key = 'sb.sec.' + sec.getAttribute('data-sec');
+      var stored = null;
+      try { stored = localStorage.getItem(key); } catch (e) {}
+      if (stored !== null) h.setAttribute('aria-expanded', stored);
+      sec.classList.toggle('collapsed', h.getAttribute('aria-expanded') !== 'true');
+      h.addEventListener('click', function () {
+        var open = h.getAttribute('aria-expanded') !== 'true';
+        h.setAttribute('aria-expanded', open ? 'true' : 'false');
+        sec.classList.toggle('collapsed', !open);
+        try { localStorage.setItem(key, open ? 'true' : 'false'); } catch (e) {}
+      });
+    });
+
     el('bg-image-file').addEventListener('change', function () {
       var f = this.files && this.files[0]; if (!f) return;
       var reader = new FileReader();
       reader.onload = function () {
         State.bgImage = { url: reader.result, fit: 'cover', ink: 'dark' };
         State.bgLoopId = null;
+        releaseVideoFile();
         el('bg-opacity-wrap').classList.add('hidden');
         el('bg-image-controls').classList.remove('hidden');
         buildImageControls();

@@ -31,7 +31,7 @@
     pride: {label: 'Pride 🏳️‍🌈', stops: [C.siren, C.bolt, C.wiretree, C.coolsweep, C.violet, C.flarepop]},
   };
   const MODE_KEYS = Object.keys(MODES);
-  const BG = {carbon: '#0a0a0f', halo: '#ffffff'};
+  const BG = {carbon: '#0a0a0f', halo: '#ffffff', graphite: '#26262d'};
 
   // seeded RNG (mulberry32) — same numbers in browser + node for a given seed
   function rng(seed) {

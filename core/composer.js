@@ -58,7 +58,8 @@
     // Preset-resolution path: DEFAULT_MOTION < resolvePreset(style, preset, ground) < m's
     // explicit per-group fields.
     const style = m.style || 'keyline';
-    const ground = spec.bg === 'carbon' ? 'carbon' : 'halo';
+    // graphite is a dark ground, so it resolves to the carbon preset row (see VALID_GROUNDS).
+    const ground = (spec.bg === 'carbon' || spec.bg === 'graphite') ? 'carbon' : 'halo';
     const MP = getMotionPresets();
     const preset = (MP && typeof MP.resolvePreset === 'function')
       ? MP.resolvePreset(style, m.preset || 'standard', ground)
@@ -218,7 +219,7 @@
     const dx = E.evalChan(look.motion.tx, tN) * W * m.movement.intensity * m.movement.driftX + m.position.biasX * W;
     const dy = E.evalChan(look.motion.ty, tN) * H * m.movement.intensity * m.movement.driftY + m.position.biasY * H;
     const zoom = 1 + E.evalChan(look.motion.zoom, tN) * m.movement.intensity * m.movement.breathe;
-    ctx.fillStyle = (spec.bg === 'carbon') ? '#0a0a0f' : '#ffffff';
+    ctx.fillStyle = (spec.bg === 'graphite') ? '#26262d' : ((spec.bg === 'carbon') ? '#0a0a0f' : '#ffffff');
     ctx.fillRect(0, 0, W, H);
     for (const o of ops) E.drawOp(ctx, o, v, P, W, H, dx, dy, zoom);
   }

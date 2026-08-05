@@ -41,7 +41,10 @@ const ZERO_FLOAT = { driftX: 0, driftY: 0, breathe: 0 };
 
 const VALID_STYLES = ['keyline', 'fritzoid', 'fritzfield'];
 const VALID_PRESETS = ['subtle', 'standard', 'bold'];
-const VALID_GROUNDS = ['halo', 'carbon'];
+// 'graphite' (2026-08-04) is a GREY carbon: same ink treatment as carbon (light copy on a
+// dark ground) — only the background fill differs — so every plates.html ground rule and every
+// preset table entry for carbon applies to it unchanged.
+const VALID_GROUNDS = ['halo', 'carbon', 'graphite'];
 
 function expand(slots, opts) {
   opts = opts || {};

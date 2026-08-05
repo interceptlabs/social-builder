@@ -18,73 +18,96 @@
       </div>
     </header>
 
-    <section class="group">
-      <h2>Template</h2>
-      <div id="template-picker" class="chips"></div>
-    </section>
+    <!-- Panel structure: five disclosure sections instead of nine flat ones. Grouped by the DECISION
+         being made rather than by which code owns the control — Canvas (shape of the frame), Background
+         (everything behind the copy: procedural style AND uploaded media, which were previously two
+         unrelated sections), Content, Timing, Export. Each remembers its open state. -->
 
-    <section class="group">
-      <h2>Format</h2>
-      <div id="ratio-picker" class="chips" role="radiogroup" aria-label="Aspect ratio"></div>
-    </section>
-
-    <section class="group" id="ground-group">
-      <h2>Ground</h2>
-      <div id="ground-picker" class="chips"></div>
-    </section>
-
-    <section class="group">
-      <h2>Logo</h2>
-      <div id="logo-picker" class="chips"></div>
-    </section>
-
-    <section class="group">
-      <h2>Motion</h2>
-      <div id="style-picker" class="chips"></div>
-      <div id="preset-picker" class="chips subtle"></div>
-      <div id="field-controls" class="hidden">
-        <span class="field-label">Pattern</span>
-        <div id="pattern-picker" class="chips subtle"></div>
-        <span class="field-label">Palette</span>
-        <div id="palette-picker" class="chips subtle"></div>
-        <span class="field-label">Animation</span>
-        <div id="animate-picker" class="chips subtle"></div>
+    <section class="group" data-sec="template">
+      <button type="button" class="sec-head" aria-expanded="true"><span>Template</span></button>
+      <div class="sec-body">
+        <div id="template-picker" class="chips"></div>
       </div>
     </section>
 
-    <section class="group">
-      <h2>Background</h2>
-      <div id="bg-picker" class="chips"></div>
-      <input type="file" id="bg-image-file" accept="image/*" class="hidden">
-      <div id="bg-opacity-wrap" class="slider-row hidden">
-        <label for="bg-opacity">Loop opacity</label>
-        <input type="range" id="bg-opacity" min="0.1" max="0.7" step="0.02" value="0.32">
-        <output id="bg-opacity-val">0.32</output>
-      </div>
-      <div id="bg-image-controls" class="hidden">
-        <div id="bg-image-fit" class="chips subtle"></div>
-        <div id="bg-image-ink" class="chips subtle"></div>
+    <section class="group" data-sec="canvas">
+      <button type="button" class="sec-head" aria-expanded="true"><span>Canvas</span></button>
+      <div class="sec-body">
+        <span class="field-label">Aspect ratio</span>
+        <div id="ratio-picker" class="chips" role="radiogroup" aria-label="Aspect ratio"></div>
+        <span class="field-label">Ground</span>
+        <div id="ground-picker" class="chips"></div>
+        <span class="field-label">Logo</span>
+        <div id="logo-picker" class="chips subtle"></div>
       </div>
     </section>
 
-    <section class="group">
-      <h2>Content</h2>
-      <div id="content-fields"></div>
-    </section>
+    <section class="group" data-sec="background">
+      <button type="button" class="sec-head" aria-expanded="true"><span>Background</span></button>
+      <div class="sec-body">
+        <span class="field-label">Source</span>
+        <div id="bg-picker" class="chips"></div>
+        <input type="file" id="bg-image-file" accept="image/*" class="hidden">
+        <input type="file" id="bg-video-file" accept="video/*" class="hidden">
+        <div id="bg-opacity-wrap" class="slider-row hidden">
+          <label for="bg-opacity">Loop opacity</label>
+          <input type="range" id="bg-opacity" min="0.1" max="0.7" step="0.02" value="0.32">
+          <output id="bg-opacity-val">0.32</output>
+        </div>
+        <div id="bg-media-status" class="hint"></div>
+        <div id="bg-image-controls" class="hidden">
+          <span class="field-label">Fit</span>
+          <div id="bg-image-fit" class="chips subtle"></div>
+          <span class="field-label">Text tone</span>
+          <div id="bg-image-ink" class="chips subtle"></div>
+        </div>
 
-    <section class="group" id="transitions-group">
-      <h2>Transitions</h2>
-      <div id="transition-controls"></div>
-    </section>
-
-    <section class="group export">
-      <h2>Export</h2>
-      <div class="export-row">
-        <button id="export-mp4" class="btn primary">Export MP4</button>
-        <button id="export-poster" class="btn">Poster PNG</button>
+        <div id="procedural-controls">
+          <span class="field-label">Style</span>
+          <div id="style-picker" class="chips"></div>
+          <span class="field-label">Intensity</span>
+          <div id="preset-picker" class="chips subtle"></div>
+          <div id="field-controls" class="hidden">
+            <span class="field-label">Pattern</span>
+            <div id="pattern-picker" class="chips subtle"></div>
+            <span class="field-label">Palette</span>
+            <div id="palette-picker" class="chips subtle"></div>
+            <div class="slider-row wide">
+              <label for="field-cell">Fritzoid size</label>
+              <input type="range" id="field-cell" min="10" max="15" step="1" value="10">
+              <output id="field-cell-val" class="mono">10px</output>
+            </div>
+            <span class="field-label">Animation</span>
+            <div id="animate-picker" class="chips subtle"></div>
+          </div>
+        </div>
       </div>
-      <div id="export-status" class="status"></div>
-      <progress id="export-progress" class="hidden" max="1" value="0"></progress>
+    </section>
+
+    <section class="group" data-sec="content">
+      <button type="button" class="sec-head" aria-expanded="true"><span>Content</span></button>
+      <div class="sec-body">
+        <div id="content-fields"></div>
+      </div>
+    </section>
+
+    <section class="group" data-sec="timing">
+      <button type="button" class="sec-head" aria-expanded="false"><span>Timing</span></button>
+      <div class="sec-body">
+        <div id="transition-controls"></div>
+      </div>
+    </section>
+
+    <section class="group export" data-sec="export">
+      <button type="button" class="sec-head" aria-expanded="true"><span>Export</span></button>
+      <div class="sec-body">
+        <div class="export-row">
+          <button id="export-mp4" class="btn primary">Export MP4</button>
+          <button id="export-poster" class="btn">Poster PNG</button>
+        </div>
+        <div id="export-status" class="status"></div>
+        <progress id="export-progress" class="hidden" max="1" value="0"></progress>
+      </div>
     </section>
 
     <footer id="foot">Self-contained · no server · WebCodecs H.264</footer>

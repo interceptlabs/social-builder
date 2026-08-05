@@ -137,7 +137,31 @@ progress::-webkit-progress-value{background:var(--flarepop);}
   #preview-wrap canvas, #preview-wrap video{max-width:calc(100vw - 40px);max-height:44vh;}
 }
 
-/* Fritz Field pattern/palette/animation pickers — a dense stack of small chips under Motion. */
+/* ---- disclosure sections ----
+   The panel was nine flat groups with every control at the same visual weight, so nothing read as
+   primary and it scrolled forever. Now: a clickable head per section, body collapses, open state
+   persists. Heads are the only place a divider-ish line is allowed and even there it is a background
+   change on hover rather than a rule. */
+.group{gap:0;}
+.sec-head{
+  appearance:none;width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;
+  background:none;border:0;padding:6px 0;cursor:pointer;font-family:inherit;
+  font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim);
+  transition:color .12s;
+}
+.sec-head:hover{color:var(--ink-mute);}
+.sec-head::after{content:'';width:7px;height:7px;flex:0 0 auto;margin-right:2px;
+  border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;
+  transform:rotate(45deg) translate(-2px,-2px);transition:transform .15s;}
+.group.collapsed .sec-head::after{transform:rotate(-45deg) translate(-1px,-1px);}
+.sec-body{display:flex;flex-direction:column;gap:8px;padding:4px 0 2px;}
+.group.collapsed .sec-body{display:none;}
+.sec-body .field-label{font-size:9.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--ink-dim);margin-top:2px;}
+.sec-body .field-label:first-child{margin-top:0;}
+#bg-media-status:empty{display:none;}
+
+/* Fritz Field pattern/palette/animation pickers — a dense stack of small chips. */
 #field-controls{display:flex;flex-direction:column;gap:4px;margin-top:8px;}
 #field-controls .field-label{font-size:9.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
   color:var(--ink-dim);margin-top:4px;}

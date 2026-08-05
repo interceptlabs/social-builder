@@ -63,6 +63,8 @@
 
   const FLAREPOP = '#ff00e5', WIRETREE = '#00d862', COOLSWEEP = '#1a7aff';
   const HALO = '#ffffff', CARBON = '#0a0a0f';
+  // graphite: a GREY carbon. Dark-ground ink rules apply unchanged; only the fill differs.
+  const GRAPHITE = '#26262d';
 
   // Verbatim from the generator's PALS.
   const PALETTES = {
@@ -177,7 +179,7 @@
 
   function buildFritzField(spec, m) {
     const W = spec.size.w, H = spec.size.h;
-    const ground = (spec.bg === 'carbon') ? 'carbon' : 'halo';
+    const ground = (spec.bg === 'carbon' || spec.bg === 'graphite') ? 'carbon' : 'halo';
     const pattern = pick(m.pattern, PATTERNS, DEFAULTS.pattern);
     const isOverlay = pattern.indexOf('ov-') === 0;
     const palKey = pick(m.palette, PALETTE_KEYS, DEFAULTS.palette);
@@ -270,7 +272,7 @@
     });
 
     return {
-      W, H, ground, bg: ground === 'carbon' ? CARBON : HALO,
+      W, H, ground, bg: (spec.bg === 'graphite') ? GRAPHITE : (ground === 'carbon' ? CARBON : HALO),
       pattern, palette: palKey, pal, colorMode, animate,
       cell, gap, layers, opacity, ovAlpha, nBands, hasPath2D, paths,
       amp: num(m.amp, DEFAULTS.amp),
