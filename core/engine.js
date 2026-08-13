@@ -233,5 +233,10 @@
     return {P, STRINGS, lean, anchors, motion};
   }
 
-  return {TAU, C, MODES, MODE_KEYS, BG, rng, genAnchors, genMotion, evalChan, buildOps, verts, project, drawOp, drawFrame, makeLook};
+  // `colorAt`/`crom`/`pathAt` are exported ADDITIVELY (2026-08-05) so sibling background styles —
+  // src/ribbon.js — can reuse this file's colour ramp and closed Catmull-Rom circuit instead of
+  // forking their own copies. Widening the returned object cannot change any existing call path:
+  // buildOps/drawOp/makeLook and every number they produce are untouched, so the legacy-regression
+  // byte-identity guarantee (scripts/verify-legacy-regression.cjs) holds by construction.
+  return {TAU, C, MODES, MODE_KEYS, BG, rng, genAnchors, genMotion, evalChan, buildOps, verts, project, drawOp, drawFrame, makeLook, colorAt, crom, pathAt};
 });

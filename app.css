@@ -5,7 +5,11 @@
 
 :root{
   --carbon:#0a0a0f; --panel:#131320; --panel-2:#1b1b2b; --line:#26263a;
-  --ink:#f4f4f8; --ink-mute:#a6a6b8; --ink-dim:#6f6f83;
+  /* --ink-dim was #6f6f83, which measures 3.75:1 on --panel — under AA (4.5:1) — and it carries every
+     section head and field label in the panel ("Template", "Aspect ratio", "Ground", …). Raised to
+     5.82:1: still clearly the quietest of the three inks, so the hierarchy is unchanged, but legible.
+     Caught by the Fritz layout harness's body-text-AA-contrast assertion; it predates the lockup work. */
+  --ink:#f4f4f8; --ink-mute:#a6a6b8; --ink-dim:#8f8fa6;
   --flarepop:#ff00e5; --coolsweep:#1a7aff; --wiretree:#00d862;
   --radius:10px;
 }
@@ -23,11 +27,15 @@ body{
   background:var(--panel); border-right:1px solid var(--line);
   overflow-y:auto; padding:22px 20px 40px; display:flex; flex-direction:column; gap:22px;
 }
-#brand{display:flex;align-items:center;gap:12px;}
-.brand-mark{
-  width:34px;height:34px;border-radius:8px;flex:0 0 auto;
-  background:
-    conic-gradient(from 210deg at 62% 40%, var(--flarepop), #9359fe 40%, var(--coolsweep) 70%, var(--flarepop));
+/* Brand → product, stacked. The lockup is 4.25:1, so setting it beside the two lines of tool name
+   inside a 320px content column would squeeze both; stacked, it reads correctly as Intercept (the
+   brand) above Social Builder (the tool). The retired mark here was a conic-gradient rounded square —
+   generic, and gradients are not a Fritz surface treatment. */
+#brand{display:flex;flex-direction:column;align-items:flex-start;gap:11px;}
+.brand-lockup{
+  /* Uniform scale only: width + the canon aspect, never a fixed height as well. Constraining both
+     axes independently is exactly how a wordmark gets warped. */
+  width:148px;aspect-ratio:324.005 / 76.2147;height:auto;display:block;
 }
 .brand-title{font-family:'Instrument Sans';font-weight:700;font-size:17px;letter-spacing:-.02em;}
 .brand-sub{font-size:11.5px;color:var(--ink-dim);margin-top:1px;}
@@ -39,6 +47,11 @@ body{
 }
 .chips{display:flex;flex-wrap:wrap;gap:7px;}
 .chips.subtle .chip{font-size:11.5px;padding:5px 10px;}
+/* The cluster-position picker is a MAP, not a list — its nine cells stand for nine places on the
+   canvas, so it has to be laid out as 3x3. As a wrapping flex row it came out nine-across with the
+   last arrow orphaned onto a second line, which throws away the whole point of pointing at a corner. */
+#rb-place-picker{display:grid;grid-template-columns:repeat(3,32px);gap:5px;justify-content:start;}
+#rb-place-picker .chip{padding:0;height:30px;display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1;}
 .chip{
   appearance:none;border:1px solid var(--line);background:var(--panel-2);color:var(--ink-mute);
   padding:7px 12px;border-radius:999px;font-size:12.5px;font-weight:500;cursor:pointer;
@@ -89,7 +102,10 @@ body{
   transition:filter .12s,border-color .12s;
 }
 .btn:hover{filter:brightness(1.12);}
-.btn.primary{background:var(--flarepop);border-color:var(--flarepop);color:#fff;flex:1;}
+/* Carbon on Flarepop, not white. White on #ff00e5 is 3.29:1 — under AA for 13px text — while carbon
+   is 6.0:1. Flarepop is a LOUD channel colour: it wants dark ink on it, not light. (Active chips are
+   a different case and stay white: they are Flarepop at 14% over the panel, not a Flarepop fill.) */
+.btn.primary{background:var(--flarepop);border-color:var(--flarepop);color:var(--carbon);flex:1;}
 .btn:disabled{opacity:.5;cursor:default;filter:none;}
 .status{font-size:12px;color:var(--ink-mute);min-height:16px;}
 .status.err{color:#ff6a8f;}
@@ -97,6 +113,18 @@ body{
 progress{width:100%;height:6px;border:none;border-radius:6px;overflow:hidden;background:var(--panel-2);}
 progress::-webkit-progress-bar{background:var(--panel-2);}
 progress::-webkit-progress-value{background:var(--flarepop);}
+
+/* ---- carousel PDF frames ---- */
+#frame-list{display:flex;flex-direction:column;gap:6px;}
+.frame-row{display:flex;align-items:center;gap:7px;background:var(--panel-2);border:1px solid var(--line);
+  border-radius:8px;padding:7px 8px;font-size:12px;}
+.frame-row.active{border-color:var(--flarepop);}
+.frame-num{font-family:ui-monospace,'Geist Mono',monospace;color:var(--ink-dim);width:14px;flex:0 0 auto;text-align:right;}
+.frame-label{flex:1;min-width:0;color:var(--ink-mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.btn.tiny{padding:5px 8px;font-size:11px;border-radius:6px;flex:0 0 auto;}
+#frame-edit-banner{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11.5px;
+  color:var(--ink-mute);background:rgba(255,0,229,.08);border:1px solid rgba(255,0,229,.3);
+  border-radius:8px;padding:8px 10px;}
 
 #foot{margin-top:auto;font-size:10.5px;color:var(--ink-dim);}
 

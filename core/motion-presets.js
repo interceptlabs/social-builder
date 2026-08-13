@@ -36,16 +36,46 @@
         bold: { cluster: { op: 0.07, wt: 1.10 }, movement: { intensity: 1.1 } },
       },
     },
-    fritzoid: {
+    // ribbon (2026-08-05) — keyline's travelling sibling. It reuses keyline's `cluster` group, so the
+    // op/wt tiers here mirror keyline's exactly (carbon deliberately subtler at every tier, same
+    // structural fix as keyline's). What a preset moves BEYOND intensity is only how ALIVE the crawl
+    // is — `slither` and `twist`. The design choices (how many ribbons, how long, how fast they lap,
+    // how wide the cluster spreads) are the USER's, so `ribbons`/`body`/`travel`/`scale` are
+    // deliberately absent and fall through to ribbon.js DEFAULTS — the same discipline fritzfield
+    // follows with pattern/palette/animate.
+    ribbon: {
       halo: {
-        subtle: { tileBase: 84, wavesPerLoop: 1, inkAlpha: 0.05 },
-        standard: { tileBase: 84, wavesPerLoop: 2, inkAlpha: 0.08 },
-        bold: { tileBase: 84, wavesPerLoop: 3, inkAlpha: 0.12 },
+        subtle: { cluster: { op: 0.09, wt: 0.95 }, movement: { intensity: 0.6 }, slither: 0.42, twist: 0.32 },
+        standard: { cluster: { op: 0.13, wt: 1.10 }, movement: { intensity: 0.85 }, slither: 0.60, twist: 0.50 },
+        bold: { cluster: { op: 0.18, wt: 1.30 }, movement: { intensity: 1.1 }, slither: 0.80, twist: 0.68 },
       },
       carbon: {
-        subtle: { tileBase: 84, wavesPerLoop: 1, inkAlpha: 0.06 },
-        standard: { tileBase: 84, wavesPerLoop: 2, inkAlpha: 0.10 },
-        bold: { tileBase: 84, wavesPerLoop: 3, inkAlpha: 0.14 },
+        subtle: { cluster: { op: 0.045, wt: 0.85 }, movement: { intensity: 0.6 }, slither: 0.42, twist: 0.32 },
+        standard: { cluster: { op: 0.06, wt: 0.95 }, movement: { intensity: 0.85 }, slither: 0.60, twist: 0.50 },
+        bold: { cluster: { op: 0.09, wt: 1.10 }, movement: { intensity: 1.1 }, slither: 0.80, twist: 0.68 },
+      },
+    },
+
+    // fritzoid (REBUILT 2026-08-05) — the canon mark, sliced and chipped, reconfiguring in place;
+    // a port of .fritz/generators/fritzoid-animator.html. The old truchet knobs
+    // (tileBase / wavesPerLoop) described a tile grid that no longer exists and are GONE; a spec
+    // still carrying them is harmless (mergeMotion's passthrough forwards unknown fields and
+    // fritzoid.js ignores them) but they no longer do anything. A preset moves intensity only —
+    // `inkAlpha` (how hard the ink sits) and `steps` (reconfigurations per loop, the generator's
+    // speed control). The DESIGN choices — `marks`, `markSize`, `slices`, `chip` — are the user's
+    // and fall through to fritzoid.js DEFAULTS, the discipline fritzfield follows with
+    // pattern/palette/animate. Nothing here may touch the mark's construction: TRI/BUDGET/ZONES and
+    // the samplers are the canon, ported verbatim, and are not preset surface.
+    fritzoid: {
+      halo: {
+        subtle: { inkAlpha: 0.10, steps: 2 },
+        standard: { inkAlpha: 0.16, steps: 3 },
+        bold: { inkAlpha: 0.24, steps: 5 },
+      },
+      carbon: {
+        subtle: { inkAlpha: 0.12, steps: 2 },
+        standard: { inkAlpha: 0.19, steps: 3 },
+        bold: { inkAlpha: 0.28, steps: 5 },
       },
     },
 

@@ -100,8 +100,12 @@
   // keyline-only preview, the frozen preview/index.html) never need it.
   function getFritzoid() {
     if (typeof module !== 'undefined' && module.exports) {
+      // Same rule as getBgStyleModule: swallow only a MISSING module, re-throw real errors.
       try { return require('./fritzoid.js'); }
-      catch (e) { throw new Error('load src/fritzoid.js before composer.js'); }
+      catch (e) {
+        if (e && e.code === 'MODULE_NOT_FOUND') throw new Error('load src/fritzoid.js before composer.js');
+        throw e;
+      }
     }
     const r = typeof self !== 'undefined' ? self : globalThis;
     if (!r.INTERCEPT_FRITZOID) throw new Error('load src/fritzoid.js before composer.js');
@@ -117,16 +121,30 @@
   // time — so a page that only ever renders keyline (the frozen preview/index.html, any
   // legacy-spec-only page) never has to load them. Each is background-only: they contribute no layer
   // treatment, so drawLayers' keyline branch handles their content exactly as it does today.
+  //
+  // `ribbon` (2026-08-05) — the answer to "keyline is too hovery": keyline's geometry is static and
+  // only its camera moves, so it hovers; ribbon gives each ribbon a finite body with a tail and a
+  // nose and crawls it head-first around a closed circuit, several travelling together in a cluster.
+  // It rides this same extension point rather than editing engine.js's buildOps/drawOp, so the
+  // keyline byte-identity guarantee is untouched — see src/ribbon.js's header.
   const BG_STYLE_MODULES = {
     fritzfield: { file: './fritzfield.js', global: 'INTERCEPT_FRITZFIELD', build: 'buildFritzField', draw: 'drawFritzFieldAt' },
+    ribbon: { file: './ribbon.js', global: 'INTERCEPT_RIBBON', build: 'buildRibbonField', draw: 'drawRibbonFieldAt' },
   };
 
   function getBgStyleModule(style) {
     const d = BG_STYLE_MODULES[style];
     if (!d) return null;
     if (typeof module !== 'undefined' && module.exports) {
+      // Only a genuinely MISSING module means "you forgot to load it". Any other failure is a real
+      // error INSIDE the style module, and must be re-thrown with its own message and stack — this
+      // catch used to swallow a ReferenceError in ribbon.js and report it as a load-order problem,
+      // which sends you looking in exactly the wrong place.
       try { return require(d.file); }
-      catch (e) { throw new Error(`load src/${style}.js before composer.js`); }
+      catch (e) {
+        if (e && e.code === 'MODULE_NOT_FOUND') throw new Error(`load src/${style}.js before composer.js`);
+        throw e;
+      }
     }
     const r = typeof self !== 'undefined' ? self : globalThis;
     if (!r[d.global]) throw new Error(`load src/${style}.js before composer.js`);

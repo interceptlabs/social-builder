@@ -425,8 +425,20 @@
     return _fontsP;
   }
 
-  // Public: renderPlates(templateName, spec) -> Promise<{ name -> canvas }>
-  function renderPlates(templateName, spec) {
+  // Public: renderPlates(templateName, spec, scale) -> Promise<{ name -> canvas }>
+  //
+  // `scale` (2026-08-13, PDF-CAROUSEL, additive) — OPTIONAL, default 1. Every plate canvas is
+  // allocated at W*scale x H*scale device pixels and its context pre-scaled by `scale`, so every
+  // existing draw call (drawTextElement/drawLockup/drawPhoto) — which all read LOGICAL (1x) rects
+  // off the iframe via getBoundingClientRect — rasterizes at `scale`x pixel density with ZERO changes
+  // to those functions or to the iframe's own layout (still opened at spec.size, unscaled: the iframe
+  // is the CSS layout, not the capture resolution). This is the standard retina-canvas technique
+  // (canvas.width = cssWidth*dpr; ctx.scale(dpr,dpr)), applied here so a caller (core/pdf-export.js)
+  // can supersample a frame for a crisp downsample without touching plates.html or any style module.
+  // scale=1 (the default, every existing call site) is BYTE-IDENTICAL to the pre-existing behaviour:
+  // ctx.scale(1,1) is a no-op and Math.round(W*1)===W.
+  function renderPlates(templateName, spec, scale) {
+    scale = (typeof scale === 'number' && scale > 0) ? scale : 1;
     var W = spec.size.w, H = spec.size.h;
     var names = (spec.layers || []).map(function (l) { return l.name; });
     return ensureFonts().then(function () { return openFrame(templateName, spec); }).then(function (frame) {
@@ -435,10 +447,11 @@
       var images = {};
       names.forEach(function (name) {
         var el = doc.querySelector('[data-plate="' + cssEscape(name) + '"]');
-        var canvas = newPlateCanvas(W, H);
+        var canvas = newPlateCanvas(Math.round(W * scale), Math.round(H * scale));
         images[name] = canvas;
         if (!el) return;                                       // missing element -> transparent plate
         var ctx = canvas.getContext('2d');
+        if (scale !== 1) ctx.scale(scale, scale);
         var kind = classifies(el);
         if (kind === 'lockup') jobs.push(drawLockup(ctx, win, el, doc));
         else if (kind === 'photo') {

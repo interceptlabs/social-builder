@@ -44,8 +44,25 @@
     // floor, 15 the ceiling. Past ~15 a 'densely packed field' stops being dense and starts being a
     // tiled motif, which is a different thing and not what this style is for.
     fieldCell: 10,
-    // Fritzoid's three real knobs, previously reachable only by editing a spec by hand.
-    fzTile: 84, fzWaves: 2, fzInk: 0.10,
+    // Fritzoid's DESIGN knobs (rebuilt 2026-08-05 — the canon mark sliced and chipped, ported from
+    // the fritzoid-animator generator; the old truchet tileBase/wavesPerLoop described a tile grid
+    // that no longer exists). There is deliberately NO angle or slice-width control: the triangle's
+    // slope, right edge, base and apex keepout are the canon's construction, not user surface.
+    // `fzInk`/`fzSteps` are INTENSITY knobs, so they track the chosen preset until the user moves
+    // them — see buildFritzoidControls. fzSlices 0 = let the cast pick (BUDGET.gapWeights).
+    fzMarks: 1, fzSize: 0.62, fzSlices: 0, fzSteps: 3, fzChip: 1, fzInk: 0.16,
+    // Colour + pattern fills (2026-08-05). 'ink' is the default so nothing existing changes; the
+    // pulse patterns come from the same fritzfield library the Fritz Field style uses.
+    fzPalette: 'ink', fzFill: 'solid', fzTarget: 'mark', fzPattern: 'ov-nest',
+    // Ribbon's knobs. Same split: count/length/width/laps/cluster-size are DESIGN choices and hold
+    // their values; slither and twist are intensity, so they track the preset until touched.
+    rbCount: 3, rbBody: 0.34, rbWidth: 96, rbTravel: 1, rbSlither: 0.6, rbTwist: 0.5, rbScale: 1,
+    // Glide defaults ON at a moderate value — Jon: "this should be a slow moving motion graphic", and
+    // glide is what makes a whole-lap crawl read slow for most of the loop.
+    rbTilt: 0.7, rbWind: 0.6, rbGlide: 0.45,
+    // Where the whole cluster sits, as a fraction of the frame. Defaults match what the old
+    // position-bias placement produced, so switching to explicit control doesn't jump the design.
+    rbX: 0.58, rbY: 0.54,
     logo: 'auto',         // lockup treatment: 'auto' (per background) | 'dark' | 'light'
     content: {},          // slot -> value (strings; 'json' fields hold parsed objects)
     colors: {},           // slot -> resolved brand hex (advanced control; absent = template default)
@@ -67,6 +84,15 @@
     t0: 0,
     rendering: false,
     pendingRefresh: false,
+    // Carousel PDF (2026-08-13) — a sequence of { template, content, colors, sizes } snapshots, each
+    // one page of a multi-page PDF (core/pdf-export.js). Canvas/background/style/logo are SHARED
+    // (read live off State at export time, same as the single-design export) — only template+content
+    // vary per frame, matching how the prior one-off carousel PDF was actually built (same style,
+    // different copy per slide). editingFrameIndex, when set, means the Template/Content panels above
+    // are currently bound to State.frames[editingFrameIndex] rather than a free-standing scratch
+    // design — see syncEditingFrame().
+    frames: [],
+    editingFrameIndex: null,
   };
 
   function el(id) { return document.getElementById(id); }
@@ -140,8 +166,12 @@
   // field; Fritz Field = the densely-packed Fritzoid pattern library from the Weekly Pulse deck, which
   // carries all 17 of the generator's pattern modes behind its own Pattern / Palette / Animation
   // pickers. Values are the spec's motion.style strings, validated by composition-spec.js.
+  // `Ribbons` (2026-08-05) is keyline's travelling sibling — finite ribbons with a head and a tail
+  // crawling around their own circuits in a cluster, instead of keyline's static spirals with an
+  // orbiting camera. Keyline is kept: every existing spec and golden renders from it.
   var STYLES = [
     { label: 'Keyline', value: 'keyline' },
+    { label: 'Ribbons', value: 'ribbon' },
     { label: 'Fritzoid', value: 'fritzoid' },
     { label: 'Fritz Field', value: 'fritzfield' },
   ];
@@ -180,38 +210,174 @@
     if (pc) pc.classList.toggle('hidden', !!(State.bgLoopId || State.bgVideoFile || State.bgImage));
     var fz = el('fritzoid-controls');
     if (fz && State.style !== 'fritzoid') fz.classList.add('hidden');
+    var rb = el('ribbon-controls');
+    if (rb && State.style !== 'ribbon') rb.classList.add('hidden');
   }
 
-  // Fritzoid's own controls. It is locked ink-only (Jon, 07-29: the coloured glitch was removed), so it
-  // gets no palette — its variables are the tile module, how many flip waves cross the field per loop,
-  // and how hard the ink sits. Those were always in the spec; they just had no UI.
-  function buildFritzoidControls() {
-    var wrap = el('fritzoid-controls');
-    if (!wrap) return;
-    wrap.classList.toggle('hidden', State.style !== 'fritzoid');
-    if (State.style !== 'fritzoid') return;
-    [['fz-tile', 'fzTile', function (v) { return v + 'px'; }, function (v) { return parseInt(v, 10); }],
-     ['fz-waves', 'fzWaves', function (v) { return String(v); }, function (v) { return parseInt(v, 10); }],
-     ['fz-ink', 'fzInk', function (v) { return Number(v).toFixed(2); }, function (v) { return parseFloat(v); }]
-    ].forEach(function (d) {
+  var INT = function (v) { return parseInt(v, 10); };
+  var FLT = function (v) { return parseFloat(v); };
+  var N2 = function (v) { return Number(v).toFixed(2); };
+  var PX = function (v) { return v + 'px'; };
+  var STR = function (v) { return String(v); };
+
+  // Wire a block of range sliders to State keys. Each descriptor is
+  // [inputId, stateKey, format, parse, presetField?] — a descriptor with a presetField is an
+  // INTENSITY knob: it tracks the resolved preset (so moving Intensity visibly moves it) right up
+  // until the user drags it, after which their value sticks. Design knobs have no presetField and
+  // simply hold. This is the "only offer what works, always a way back" rule applied to sliders:
+  // a control that silently overrode the preset it sits under would misreport the live state.
+  function wireSliders(descriptors, presetValues) {
+    descriptors.forEach(function (d) {
       var input = el(d[0]), out = el(d[0] + '-val');
       if (!input) return;
       if (!input.__wired) {
         input.__wired = true;
         input.addEventListener('input', function () {
+          input.__touched = true;
           State[d[1]] = d[3](input.value);
           if (out) out.textContent = d[2](State[d[1]]);
           scheduleRefresh();
         });
       }
+      if (d[4] && !input.__touched && presetValues && presetValues[d[4]] != null) State[d[1]] = presetValues[d[4]];
       input.value = String(State[d[1]]);
       if (out) out.textContent = d[2](State[d[1]]);
     });
   }
 
+  function resolvedPreset(style) {
+    var MP = window.MOTION_PRESETS;
+    if (!MP || typeof MP.resolvePreset !== 'function') return {};
+    return MP.resolvePreset(style, State.preset, State.ground === 'halo' ? 'halo' : 'carbon') || {};
+  }
+
+  // Fritzoid's own controls. It is locked ink-only (Jon, 07-29: the coloured glitch was removed), so
+  // it gets no palette. Rebuilt 2026-08-05 with the style itself: the knobs are how many marks, how
+  // big, how many slices cut them, how heavily they are chipped and how often they reconfigure.
+  // NOT offered, on purpose: the triangle's angle, right edge, base and apex keepout. Those are the
+  // canon's construction ported from the generator — a slider on them would just be a slider for
+  // drawing the mark wrong.
+  function buildFritzoidControls() {
+    var wrap = el('fritzoid-controls');
+    if (!wrap) return;
+    wrap.classList.toggle('hidden', State.style !== 'fritzoid');
+    if (State.style !== 'fritzoid') return;
+    // The weight slider tracks the preset while the mark is INK, but a brand palette needs a very
+    // different default: colour at ink alpha is a pastel wash, which is the opposite of why you'd
+    // pick colour. So when a palette is in play the tracked value comes from COLOUR_WEIGHT instead —
+    // still overridable, and still snapping back if you return to ink.
+    var COLOUR_WEIGHT = 0.55;
+    var pre = resolvedPreset('fritzoid');
+    if (State.fzPalette !== 'ink') pre = Object.assign({}, pre, { inkAlpha: COLOUR_WEIGHT });
+    wireSliders([
+      ['fz-marks', 'fzMarks', STR, INT],
+      ['fz-size', 'fzSize', N2, FLT],
+      ['fz-slices', 'fzSlices', function (v) { return Number(v) === 0 ? 'auto' : String(v); }, INT],
+      ['fz-steps', 'fzSteps', STR, INT, 'steps'],
+      ['fz-chip', 'fzChip', N2, FLT],
+      ['fz-ink', 'fzInk', N2, FLT, 'inkAlpha'],
+    ], pre);
+
+    var FZ = window.INTERCEPT_FRITZOID;
+    renderChipRow(el('fz-palette-picker'),
+      (FZ ? FZ.PALETTE_KEYS : ['ink']).map(function (v) { return { label: v === 'ink' ? 'Ink' : (PALETTE_LABELS[v] || v), value: v }; }),
+      State.fzPalette,
+      function (v) { State.fzPalette = v; refresh(); buildFritzoidControls(); });
+
+    renderChipRow(el('fz-fill-picker'),
+      [{ label: 'Solid', value: 'solid' }, { label: 'Pulse pattern', value: 'pattern' }],
+      State.fzFill,
+      function (v) { State.fzFill = v; refresh(); buildFritzoidControls(); });
+
+    // Pattern-only controls stay hidden on a solid fill — offering "pattern on: mark/chips" when
+    // there is no pattern would be offering something that does nothing.
+    var pw = el('fz-pattern-controls');
+    if (pw) pw.classList.toggle('hidden', State.fzFill !== 'pattern');
+    if (State.fzFill !== 'pattern') return;
+
+    renderChipRow(el('fz-target-picker'),
+      [{ label: 'Mark', value: 'mark' }, { label: 'Chips', value: 'chips' }, { label: 'Both', value: 'both' }],
+      State.fzTarget,
+      function (v) { State.fzTarget = v; refresh(); buildFritzoidControls(); });
+
+    var FF = window.INTERCEPT_FRITZFIELD;
+    if (FF) {
+      renderChipRow(el('fz-pattern-picker'),
+        FF.PATTERNS.map(function (v) { return { label: PATTERN_LABELS[v] || v, value: v }; }),
+        State.fzPattern,
+        function (v) { State.fzPattern = v; refresh(); buildFritzoidControls(); });
+    }
+  }
+
+  // Ribbon's controls — the shape of the crawl.
+  function buildRibbonControls() {
+    var wrap = el('ribbon-controls');
+    if (!wrap) return;
+    wrap.classList.toggle('hidden', State.style !== 'ribbon');
+    if (State.style !== 'ribbon') return;
+    wireSliders([
+      ['rb-count', 'rbCount', STR, INT],
+      ['rb-body', 'rbBody', N2, FLT],
+      ['rb-width', 'rbWidth', PX, INT],
+      ['rb-travel', 'rbTravel', function (v) { return v + (Number(v) === 1 ? ' lap' : ' laps'); }, INT],
+      ['rb-slither', 'rbSlither', N2, FLT, 'slither'],
+      ['rb-twist', 'rbTwist', N2, FLT, 'twist'],
+      ['rb-scale', 'rbScale', N2, FLT],
+      ['rb-tilt', 'rbTilt', N2, FLT],
+      ['rb-wind', 'rbWind', N2, FLT],
+      ['rb-glide', 'rbGlide', function (v) { return Number(v) === 0 ? 'off' : Number(v).toFixed(2); }, FLT],
+      ['rb-x', 'rbX', N2, FLT],
+      ['rb-y', 'rbY', N2, FLT],
+    ], resolvedPreset('ribbon'));
+
+    // LAP TIME — the ribbons' real speed control, and the only one that can go slower rather than
+    // faster. `travel` has to be a whole number of laps (the loop seam depends on the head coming
+    // home), so it bottoms out at one lap and cannot express "slower"; lap time has no floor. It
+    // writes the composition's loopSec through the SAME setLoopSec path the Transitions panel uses,
+    // and records the override so buildSpec re-applies it — one value, two places to reach it, no
+    // second source of truth. syncTransitionControls() then pulls that panel back into agreement.
+    var lt = el('rb-laptime'), ltOut = el('rb-laptime-val');
+    if (lt) {
+      if (!lt.__wired) {
+        lt.__wired = true;
+        lt.addEventListener('input', function () {
+          var sec = parseFloat(lt.value);
+          State.timingOverrides.loopSec = sec;
+          setLoopSec(sec);
+          if (ltOut) ltOut.textContent = sec.toFixed(1) + 's';
+          syncTransitionControls();
+        });
+      }
+      var liveLoop = (State.spec && State.spec.motion && State.spec.motion.speed && State.spec.motion.speed.loopSec)
+        || State.timingOverrides.loopSec || 8;
+      lt.value = String(liveLoop);
+      if (ltOut) ltOut.textContent = Number(liveLoop).toFixed(1) + 's';
+    }
+
+    // Nine-point placement, so "put them in a corner" is one click rather than two slider hunts. The
+    // chips WRITE the X/Y sliders (they are the same value), so the panel never disagrees with itself.
+    var PLACES = [
+      ['↖', 0.16, 0.16], ['↑', 0.5, 0.16], ['↗', 0.84, 0.16],
+      ['←', 0.16, 0.5], ['·', 0.5, 0.5], ['→', 0.84, 0.5],
+      ['↙', 0.16, 0.84], ['↓', 0.5, 0.84], ['↘', 0.84, 0.84],
+    ];
+    var here = PLACES.filter(function (p) {
+      return Math.abs(p[1] - State.rbX) < 0.02 && Math.abs(p[2] - State.rbY) < 0.02;
+    })[0];
+    renderChipRow(el('rb-place-picker'),
+      PLACES.map(function (p) { return { label: p[0], value: p[0] }; }),
+      here ? here[0] : null,
+      function (v) {
+        var p = PLACES.filter(function (q) { return q[0] === v; })[0];
+        State.rbX = p[1]; State.rbY = p[2];
+        refresh(); buildRibbonControls();
+      });
+  }
+
   function buildFieldPickers() {
     syncProceduralVisibility();
     buildFritzoidControls();
+    buildRibbonControls();
     var wrap = el('field-controls');
     if (!wrap) return;
     var on = State.style === 'fritzfield';
@@ -541,11 +707,24 @@
     });
   }
 
+  // Module-default content for a template (the same seeding selectTemplate() has always done),
+  // extracted so the Carousel PDF frame editor (editFrame(), below) can re-seed a frame's content
+  // when its per-frame template changes, without duplicating this loop.
+  function defaultContentFor(name) {
+    var t = window.SOCIAL_TEMPLATES.get(name);
+    var content = {};
+    t.fields.forEach(function (f) {
+      if (f.type === 'json') { try { content[f.key] = JSON.parse(f.def); } catch (e) { content[f.key] = f.def; } }
+      else if (f.key !== 'photo') content[f.key] = f.def;
+    });
+    return content;
+  }
+
   function selectTemplate(name) {
     State.templateName = name;
     var t = window.SOCIAL_TEMPLATES.get(name);
     // Seed content + ground from the module defaults (each field's own default is applied in build).
-    State.content = {};
+    State.content = defaultContentFor(name);
     State.colors = {};
     State.sizes = {};
     State.photoOriginal = null;
@@ -554,14 +733,11 @@
     // so drop the per-move overrides — a stale one must not ride onto the new template. loopSec is
     // shared by all six, so it survives the switch.
     State.timingOverrides = { wordReveal: {}, odometer: {}, beatCycle: {}, pulse: {}, loopSec: State.timingOverrides.loopSec };
-    t.fields.forEach(function (f) {
-      if (f.type === 'json') { try { State.content[f.key] = JSON.parse(f.def); } catch (e) { State.content[f.key] = f.def; } }
-      else if (f.key !== 'photo') State.content[f.key] = f.def;
-    });
     State.ground = t.defaultGround || 'halo';
     buildTemplatePicker();
     buildGroundPicker();
     buildContentFields();
+    syncEditingFrame();
     refresh();
   }
 
@@ -621,15 +797,181 @@
       spec.motion.cell = State.fieldCell;
     }
     if (State.style === 'fritzoid') {
-      spec.motion.tileBase = State.fzTile;
-      spec.motion.wavesPerLoop = State.fzWaves;
+      spec.motion.marks = State.fzMarks;
+      spec.motion.markSize = State.fzSize;
+      spec.motion.slices = State.fzSlices;
+      spec.motion.steps = State.fzSteps;
+      spec.motion.chip = State.fzChip;
       spec.motion.inkAlpha = State.fzInk;
+      spec.motion.palette = State.fzPalette;
+      spec.motion.fill = State.fzFill;
+      spec.motion.fillTarget = State.fzTarget;
+      spec.motion.fillPattern = State.fzPattern;
+    }
+    if (State.style === 'ribbon') {
+      spec.motion.ribbons = State.rbCount;
+      spec.motion.body = State.rbBody;
+      spec.motion.width = State.rbWidth;
+      spec.motion.travel = State.rbTravel;
+      spec.motion.slither = State.rbSlither;
+      spec.motion.twist = State.rbTwist;
+      spec.motion.scale = State.rbScale;
+      spec.motion.tilt = State.rbTilt;
+      spec.motion.wind = State.rbWind;
+      spec.motion.glide = State.rbGlide;
+      spec.motion.originX = State.rbX;
+      spec.motion.originY = State.rbY;
     }
     if (State.bgVideoFile) spec.backgroundVideo = { src: State.bgVideoFile.url, opacity: State.bgOpacity };
     if (State.bgLoopId) spec.backgroundVideo = { loop: State.bgLoopId, opacity: State.bgOpacity };
     if (State.bgImage) spec.backgroundImage = { src: State.bgImage.url, fit: State.bgImage.fit || 'cover' };
     applyTimingOverrides(spec);
     return spec;
+  }
+
+  // ---- Carousel PDF: frame management ------------------------------------------------------------
+  //
+  // A "frame" is a { template, content, colors, sizes } snapshot — everything buildSpec() reads that
+  // ISN'T shared canvas/background/style state. Building a spec for a frame reuses buildSpec() itself
+  // (rather than re-implementing its ~60 lines of style/background/timing wiring): swap State's four
+  // per-template fields to the frame's values, call buildSpec(), swap them back. buildSpec() is fully
+  // synchronous, so this is safe with no risk of another caller observing the swapped-in values.
+
+  function cloneJSON(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
+
+  function buildSpecForFrame(frame) {
+    var savedName = State.templateName, savedContent = State.content;
+    var savedColors = State.colors, savedSizes = State.sizes;
+    State.templateName = frame.template;
+    State.content = frame.content;
+    State.colors = frame.colors || {};
+    State.sizes = frame.sizes || {};
+    var spec;
+    try { spec = buildSpec(); }
+    finally {
+      State.templateName = savedName; State.content = savedContent;
+      State.colors = savedColors; State.sizes = savedSizes;
+    }
+    return spec;
+  }
+
+  // Mirrors the live Template/Content panels back into the frame being edited (if any) — the single
+  // integration point every content/template change passes through (called from refresh(), which
+  // scheduleRefresh() and every picker's onClick both funnel into).
+  function syncEditingFrame() {
+    var i = State.editingFrameIndex;
+    if (i == null) return;
+    if (!State.frames[i]) { State.editingFrameIndex = null; return; }
+    State.frames[i] = {
+      template: State.templateName,
+      content: cloneJSON(State.content),
+      colors: cloneJSON(State.colors),
+      sizes: cloneJSON(State.sizes),
+    };
+    buildFrameList();
+  }
+
+  function frameSummary(frame) {
+    var t = window.SOCIAL_TEMPLATES.get(frame.template);
+    var label = (t && t.label) || frame.template;
+    var firstKey = t && t.fields && t.fields[0] && t.fields[0].key;
+    var rawVal = firstKey ? frame.content[firstKey] : '';
+    var text = Array.isArray(rawVal) ? rawVal.join(' ') : String(rawVal == null ? '' : rawVal);
+    text = text.replace(/\n/g, ' ').trim().slice(0, 44);
+    return label + (text ? ' — ' + text : '');
+  }
+
+  function btnEl(label, onClick, extraClass) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'btn tiny' + (extraClass ? ' ' + extraClass : '');
+    b.textContent = label;
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function buildFrameEditBanner() {
+    var banner = el('frame-edit-banner');
+    banner.innerHTML = '';
+    if (State.editingFrameIndex == null) { banner.classList.add('hidden'); return; }
+    banner.classList.remove('hidden');
+    var span = document.createElement('span');
+    span.textContent = 'Editing Frame ' + (State.editingFrameIndex + 1) + ' — Template/Content changes above save into it.';
+    banner.appendChild(span);
+    banner.appendChild(btnEl('Done', function () {
+      State.editingFrameIndex = null;
+      buildFrameEditBanner();
+      buildFrameList();
+    }));
+  }
+
+  function buildFrameList() {
+    var wrap = el('frame-list');
+    wrap.innerHTML = '';
+    State.frames.forEach(function (frame, i) {
+      var row = document.createElement('div');
+      row.className = 'frame-row' + (State.editingFrameIndex === i ? ' active' : '');
+      var num = document.createElement('span'); num.className = 'frame-num'; num.textContent = String(i + 1);
+      var label = document.createElement('span'); label.className = 'frame-label'; label.textContent = frameSummary(frame);
+      row.appendChild(num);
+      row.appendChild(label);
+      row.appendChild(btnEl('Edit', function () { editFrame(i); }));
+      var up = btnEl('↑', function () { moveFrame(i, -1); }); up.disabled = i === 0;
+      var down = btnEl('↓', function () { moveFrame(i, 1); }); down.disabled = i === State.frames.length - 1;
+      row.appendChild(up);
+      row.appendChild(down);
+      row.appendChild(btnEl('Remove', function () { removeFrame(i); }));
+      wrap.appendChild(row);
+    });
+    el('export-pdf-carousel').disabled = State.frames.length === 0 || !window.PDF_EXPORT.isSupported();
+  }
+
+  // Snapshot whatever the Template/Content panels currently hold as a new frame — the low-friction
+  // path: configure a post as usual, add it, tweak the template/content for the next slide, add
+  // again. Mirrors exactly how the prior one-off carousel PDF was actually built by hand.
+  function addFrameFromCurrent() {
+    State.frames.push({
+      template: State.templateName,
+      content: cloneJSON(State.content),
+      colors: cloneJSON(State.colors),
+      sizes: cloneJSON(State.sizes),
+    });
+    buildFrameList();
+  }
+
+  // Load a saved frame back into the live Template/Content panels for editing. Deliberately reuses
+  // those SAME panels (rather than a parallel per-frame field UI) — one tested implementation of
+  // text/textarea/json/photo fields + per-line colour/size, not two to keep in sync.
+  function editFrame(i) {
+    var frame = State.frames[i];
+    if (!frame) return;
+    State.templateName = frame.template;
+    State.content = cloneJSON(frame.content);
+    State.colors = cloneJSON(frame.colors || {});
+    State.sizes = cloneJSON(frame.sizes || {});
+    State.photoOriginal = null; State.matteOn = false;
+    State.editingFrameIndex = i;
+    buildTemplatePicker();
+    buildContentFields();
+    buildFrameEditBanner();
+    buildFrameList();
+    refresh();
+  }
+
+  function moveFrame(i, delta) {
+    var j = i + delta;
+    if (j < 0 || j >= State.frames.length) return;
+    var tmp = State.frames[i]; State.frames[i] = State.frames[j]; State.frames[j] = tmp;
+    if (State.editingFrameIndex === i) State.editingFrameIndex = j;
+    else if (State.editingFrameIndex === j) State.editingFrameIndex = i;
+    buildFrameList();
+  }
+
+  function removeFrame(i) {
+    State.frames.splice(i, 1);
+    if (State.editingFrameIndex === i) State.editingFrameIndex = null;
+    else if (State.editingFrameIndex != null && State.editingFrameIndex > i) State.editingFrameIndex--;
+    buildFrameEditBanner();
+    buildFrameList();
   }
 
   // ---- transitions (timing) --------------------------------------------------------------------
@@ -720,7 +1062,11 @@
   function transitionControlsFor(spec) {
     var list = [];
     var loopSec = (spec.motion && spec.motion.speed && spec.motion.speed.loopSec) || spec.dur || 8;
-    list.push({ id: 'tr-loopsec', label: 'Loop duration', min: 2, max: 16, step: 0.5, value: loopSec, kind: 'loopSec', fmt: function (v) { return v.toFixed(1) + 's'; } });
+    // Max raised 16 -> 40s (2026-08-05). Loop duration is the ONLY continuous speed control the
+    // procedural backgrounds have — a ribbon's lap count has to stay a whole number for the seam to
+    // close — so a 16s ceiling was also a floor on how slow a background could move. The ribbon panel
+    // drives this same value through setLoopSec, so the two stay in step.
+    list.push({ id: 'tr-loopsec', label: 'Loop duration', min: 2, max: 40, step: 0.5, value: loopSec, kind: 'loopSec', fmt: function (v) { return v.toFixed(1) + 's'; } });
 
     if (spec.odometer) {
       var od = spec.odometer;
@@ -953,6 +1299,10 @@
   }
 
   function refresh() {
+    // Every structural/content change funnels through here (directly or via scheduleRefresh), so this
+    // is the one place that reliably mirrors a live edit back into the Carousel PDF frame being
+    // edited, if any (see State.editingFrameIndex / syncEditingFrame()).
+    syncEditingFrame();
     if (State.rendering) { State.pendingRefresh = true; return; }
     State.rendering = true;
     var spec;
@@ -1092,6 +1442,71 @@
       .finally(function () { btn.disabled = false; });
   }
 
+  // ---- PDF export (lossless; core/pdf-export.js) --------------------------------------------------
+  //
+  // Single-frame "Export PDF" — the current design (whatever's live in the preview) as a 1-page PDF.
+  // Independent of the Carousel PDF below: this always exports the free-standing design in the main
+  // panels, never the frames list.
+  function doExportPdf() {
+    if (!window.PDF_EXPORT.isSupported()) {
+      setStatus('This browser can’t export a lossless PDF (no CompressionStream — try a recent Chrome/Edge/Firefox/Safari).', 'err');
+      return;
+    }
+    var btn = el('export-pdf'); btn.disabled = true;
+    setStatus('Rendering PDF…');
+    withPausedPreview(function () {
+      return ensureBgReady().then(function () {
+        return window.PDF_EXPORT.renderFrame(State.templateName, State.spec, exportOpts());
+      }).then(function (canvas) {
+        var rgb = window.PDF_EXPORT.canvasToRGB(canvas);
+        return window.PDF_EXPORT.buildPdf([{ width: canvas.width, height: canvas.height, rgb: rgb }]);
+      }).then(function (blob) { download(blob, filename('pdf')); setStatus('Saved ' + filename('pdf'), 'ok'); });
+    }).catch(function (e) { setStatus('PDF failed: ' + (e && e.message), 'err'); console.error(e); })
+      .finally(function () { btn.disabled = false; });
+  }
+
+  function carouselFilename() {
+    return ['intercept-carousel', State.ratio, State.bgLoopId ? State.bgLoopId : State.style].join('-') + '.pdf';
+  }
+
+  // Carousel PDF — every frame in State.frames, in order, one PDF page each, sharing the CURRENT
+  // canvas/background/style/logo settings (only template+content vary per frame; see
+  // buildSpecForFrame()). ensureBgReady() only needs to run once: every frame's background comes from
+  // the same shared <video>/<img> element.
+  function doExportPdfCarousel() {
+    if (!window.PDF_EXPORT.isSupported()) {
+      setStatus('This browser can’t export a lossless PDF (no CompressionStream — try a recent Chrome/Edge/Firefox/Safari).', 'err');
+      return;
+    }
+    if (!State.frames.length) { setStatus('Add at least one frame first.', 'err'); return; }
+    var btn = el('export-pdf-carousel'); btn.disabled = true;
+    var progress = el('pdf-progress'); progress.classList.remove('hidden'); progress.value = 0;
+    setStatus('Rendering carousel PDF (0/' + State.frames.length + ')…');
+    var opts = exportOpts();
+    var frameList = State.frames.slice();          // snapshot: unaffected by edits mid-export
+    withPausedPreview(function () {
+      return ensureBgReady().then(function () {
+        var pages = [];
+        function next(i) {
+          if (i >= frameList.length) return Promise.resolve();
+          var spec = buildSpecForFrame(frameList[i]);
+          return window.PDF_EXPORT.renderFrame(frameList[i].template, spec, opts).then(function (canvas) {
+            pages.push({ width: canvas.width, height: canvas.height, rgb: window.PDF_EXPORT.canvasToRGB(canvas) });
+            progress.value = (i + 1) / frameList.length;
+            setStatus('Rendering carousel PDF (' + (i + 1) + '/' + frameList.length + ')…');
+            return next(i + 1);
+          });
+        }
+        return next(0).then(function () { return window.PDF_EXPORT.buildPdf(pages); });
+      }).then(function (blob) {
+        var name = carouselFilename();
+        download(blob, name);
+        setStatus('Saved ' + name + ' (' + frameList.length + ' frames)', 'ok');
+      });
+    }).catch(function (e) { setStatus('Carousel PDF failed: ' + (e && e.message), 'err'); console.error(e); })
+      .finally(function () { btn.disabled = false; progress.classList.add('hidden'); });
+  }
+
   // Ensure the bg media has decoded data before export reads it.
   function ensureBgReady() {
     var waits = [];
@@ -1116,6 +1531,15 @@
     });
     el('export-mp4').addEventListener('click', doExportMp4);
     el('export-poster').addEventListener('click', doExportPoster);
+    el('export-pdf').addEventListener('click', doExportPdf);
+    el('frame-add').addEventListener('click', addFrameFromCurrent);
+    el('export-pdf-carousel').addEventListener('click', doExportPdfCarousel);
+    buildFrameList();
+    buildFrameEditBanner();
+    if (!window.PDF_EXPORT.isSupported()) {
+      el('export-pdf').disabled = true;
+      el('export-pdf-carousel').disabled = true;
+    }
 
     el('bg-video-file').addEventListener('change', function () {
       var f = this.files && this.files[0]; this.value = '';
