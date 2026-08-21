@@ -31,7 +31,7 @@
     templateName: null,
     ratio: '1x1',
     ground: 'halo',
-    style: 'keyline',
+    style: 'ribbon',
     preset: 'standard',
     // Fritz Field selections. Absent => fritzfield.js DEFAULTS (ov-nest / coolsweep-only / sweep —
     // Jon's deck pick). These are DESIGN choices, so they survive a preset change; a preset only moves
@@ -39,26 +39,19 @@
     pattern: 'ov-nest',
     palette: 'coolsweep-only',
     animate: 'sweep',
-    // Fritzoid mark size in px at 1080. Deliberately a NARROW range: 10 is the deck's spec and the
-    // floor, 15 the ceiling. Past ~15 a 'densely packed field' stops being dense and starts being a
-    // tiled motif, which is a different thing and not what this style is for.
+    // Fritz Field's tile density, in px at 1080. Deliberately a NARROW range: 10 is the deck's spec
+    // and the floor, 15 the ceiling. Past ~15 a 'densely packed field' stops being dense and starts
+    // being a tiled motif, which is a different thing and not what this style is for.
     fieldCell: 10,
-    // Fritzoid's DESIGN knobs (rebuilt 2026-08-05 — the canon mark sliced and chipped, ported from
-    // the fritzoid-animator generator; the old truchet tileBase/wavesPerLoop described a tile grid
-    // that no longer exists). There is deliberately NO angle or slice-width control: the triangle's
-    // slope, right edge, base and apex keepout are the canon's construction, not user surface.
-    // `fzInk`/`fzSteps` are INTENSITY knobs, so they track the chosen preset until the user moves
-    // them — see buildFritzoidControls. fzSlices 0 = let the cast pick (BUDGET.gapWeights).
-    fzMarks: 1, fzSize: 0.62, fzSlices: 0, fzSteps: 3, fzChip: 1, fzInk: 0.16,
-    // Colour + pattern fills (2026-08-05). 'ink' is the default so nothing existing changes; the
-    // pulse patterns come from the same fritzfield library the Fritz Field style uses.
-    fzPalette: 'ink', fzFill: 'solid', fzTarget: 'mark', fzPattern: 'ov-nest',
-    // Ribbon's knobs. Same split: count/length/width/laps/cluster-size are DESIGN choices and hold
-    // their values; slither and twist are intensity, so they track the preset until touched.
-    rbCount: 3, rbBody: 0.34, rbWidth: 96, rbTravel: 1, rbSlither: 0.6, rbTwist: 0.5, rbScale: 1,
+    // Ribbon's knobs. `length`/`width`/`wind` are fixed, not user surface (Jon, 08-21): length/width
+    // hold at their prior slider maxima (always the fullest, most visible body), wind holds low
+    // (a near-flat ring, not the donut-ier high end of the engine's own 0-1 range). Only
+    // count/laps/cluster-size stay DESIGN choices the user holds; slither and twist are intensity, so
+    // they track the preset until touched.
+    rbCount: 3, rbBody: 0.70, rbWidth: 200, rbTravel: 1, rbSlither: 0.6, rbTwist: 0.5, rbScale: 1,
     // Glide defaults ON at a moderate value — Jon: "this should be a slow moving motion graphic", and
     // glide is what makes a whole-lap crawl read slow for most of the loop.
-    rbTilt: 0.7, rbWind: 0.6, rbGlide: 0.45,
+    rbTilt: 0.7, rbWind: 0.05, rbGlide: 0.45,
     // Where the whole cluster sits, as a fraction of the frame. Defaults match what the old
     // position-bias placement produced, so switching to explicit control doesn't jump the design.
     rbX: 0.58, rbY: 0.54,
@@ -162,17 +155,16 @@
     return (State.ground === 'carbon') ? 'halo' : 'carbon';
   }
 
-  // Procedural backgrounds. Keyline = the spiral line ribbons; Fritzoid = the ambient truchet tile
-  // field; Fritz Field = the densely-packed Fritzoid pattern library from the Weekly Pulse deck, which
-  // carries all 17 of the generator's pattern modes behind its own Pattern / Palette / Animation
-  // pickers. Values are the spec's motion.style strings, validated by composition-spec.js.
-  // `Ribbons` (2026-08-05) is keyline's travelling sibling — finite ribbons with a head and a tail
-  // crawling around their own circuits in a cluster, instead of keyline's static spirals with an
-  // orbiting camera. Keyline is kept: every existing spec and golden renders from it.
+  // Procedural backgrounds. Ribbons = finite ribbons with a head and a tail crawling around their own
+  // circuits in a cluster; Fritz Field = the densely-packed Fritzoid pattern library from the Weekly
+  // Pulse deck, which carries all 17 of the generator's pattern modes behind its own Pattern / Palette
+  // / Animation pickers. Values are the spec's motion.style strings, validated by composition-spec.js.
+  // Keyline and Fritzoid REMOVED from the picker (Jon, 08-21) — Ribbons superseded keyline as the
+  // preferred motion, and Fritzoid's own toggle wasn't earning its panel. Both engines (src/ribbon.js
+  // sits alongside src/motion-presets.js's keyline/fritzoid tables) and every existing spec/golden
+  // that names them are untouched — this only removes the builder's user-facing choice.
   var STYLES = [
-    { label: 'Keyline', value: 'keyline' },
     { label: 'Ribbons', value: 'ribbon' },
-    { label: 'Fritzoid', value: 'fritzoid' },
     { label: 'Fritz Field', value: 'fritzfield' },
   ];
 
@@ -208,8 +200,6 @@
   function syncProceduralVisibility() {
     var pc = el('procedural-controls');
     if (pc) pc.classList.toggle('hidden', !!(State.bgLoopId || State.bgVideoFile || State.bgImage));
-    var fz = el('fritzoid-controls');
-    if (fz && State.style !== 'fritzoid') fz.classList.add('hidden');
     var rb = el('ribbon-controls');
     if (rb && State.style !== 'ribbon') rb.classList.add('hidden');
   }
@@ -217,7 +207,6 @@
   var INT = function (v) { return parseInt(v, 10); };
   var FLT = function (v) { return parseFloat(v); };
   var N2 = function (v) { return Number(v).toFixed(2); };
-  var PX = function (v) { return v + 'px'; };
   var STR = function (v) { return String(v); };
 
   // Wire a block of range sliders to State keys. Each descriptor is
@@ -251,64 +240,6 @@
     return MP.resolvePreset(style, State.preset, State.ground === 'halo' ? 'halo' : 'carbon') || {};
   }
 
-  // Fritzoid's own controls. It is locked ink-only (Jon, 07-29: the coloured glitch was removed), so
-  // it gets no palette. Rebuilt 2026-08-05 with the style itself: the knobs are how many marks, how
-  // big, how many slices cut them, how heavily they are chipped and how often they reconfigure.
-  // NOT offered, on purpose: the triangle's angle, right edge, base and apex keepout. Those are the
-  // canon's construction ported from the generator — a slider on them would just be a slider for
-  // drawing the mark wrong.
-  function buildFritzoidControls() {
-    var wrap = el('fritzoid-controls');
-    if (!wrap) return;
-    wrap.classList.toggle('hidden', State.style !== 'fritzoid');
-    if (State.style !== 'fritzoid') return;
-    // The weight slider tracks the preset while the mark is INK, but a brand palette needs a very
-    // different default: colour at ink alpha is a pastel wash, which is the opposite of why you'd
-    // pick colour. So when a palette is in play the tracked value comes from COLOUR_WEIGHT instead —
-    // still overridable, and still snapping back if you return to ink.
-    var COLOUR_WEIGHT = 0.55;
-    var pre = resolvedPreset('fritzoid');
-    if (State.fzPalette !== 'ink') pre = Object.assign({}, pre, { inkAlpha: COLOUR_WEIGHT });
-    wireSliders([
-      ['fz-marks', 'fzMarks', STR, INT],
-      ['fz-size', 'fzSize', N2, FLT],
-      ['fz-slices', 'fzSlices', function (v) { return Number(v) === 0 ? 'auto' : String(v); }, INT],
-      ['fz-steps', 'fzSteps', STR, INT, 'steps'],
-      ['fz-chip', 'fzChip', N2, FLT],
-      ['fz-ink', 'fzInk', N2, FLT, 'inkAlpha'],
-    ], pre);
-
-    var FZ = window.INTERCEPT_FRITZOID;
-    renderChipRow(el('fz-palette-picker'),
-      (FZ ? FZ.PALETTE_KEYS : ['ink']).map(function (v) { return { label: v === 'ink' ? 'Ink' : (PALETTE_LABELS[v] || v), value: v }; }),
-      State.fzPalette,
-      function (v) { State.fzPalette = v; refresh(); buildFritzoidControls(); });
-
-    renderChipRow(el('fz-fill-picker'),
-      [{ label: 'Solid', value: 'solid' }, { label: 'Pulse pattern', value: 'pattern' }],
-      State.fzFill,
-      function (v) { State.fzFill = v; refresh(); buildFritzoidControls(); });
-
-    // Pattern-only controls stay hidden on a solid fill — offering "pattern on: mark/chips" when
-    // there is no pattern would be offering something that does nothing.
-    var pw = el('fz-pattern-controls');
-    if (pw) pw.classList.toggle('hidden', State.fzFill !== 'pattern');
-    if (State.fzFill !== 'pattern') return;
-
-    renderChipRow(el('fz-target-picker'),
-      [{ label: 'Mark', value: 'mark' }, { label: 'Chips', value: 'chips' }, { label: 'Both', value: 'both' }],
-      State.fzTarget,
-      function (v) { State.fzTarget = v; refresh(); buildFritzoidControls(); });
-
-    var FF = window.INTERCEPT_FRITZFIELD;
-    if (FF) {
-      renderChipRow(el('fz-pattern-picker'),
-        FF.PATTERNS.map(function (v) { return { label: PATTERN_LABELS[v] || v, value: v }; }),
-        State.fzPattern,
-        function (v) { State.fzPattern = v; refresh(); buildFritzoidControls(); });
-    }
-  }
-
   // Ribbon's controls — the shape of the crawl.
   function buildRibbonControls() {
     var wrap = el('ribbon-controls');
@@ -317,14 +248,11 @@
     if (State.style !== 'ribbon') return;
     wireSliders([
       ['rb-count', 'rbCount', STR, INT],
-      ['rb-body', 'rbBody', N2, FLT],
-      ['rb-width', 'rbWidth', PX, INT],
       ['rb-travel', 'rbTravel', function (v) { return v + (Number(v) === 1 ? ' lap' : ' laps'); }, INT],
       ['rb-slither', 'rbSlither', N2, FLT, 'slither'],
       ['rb-twist', 'rbTwist', N2, FLT, 'twist'],
       ['rb-scale', 'rbScale', N2, FLT],
       ['rb-tilt', 'rbTilt', N2, FLT],
-      ['rb-wind', 'rbWind', N2, FLT],
       ['rb-glide', 'rbGlide', function (v) { return Number(v) === 0 ? 'off' : Number(v).toFixed(2); }, FLT],
       ['rb-x', 'rbX', N2, FLT],
       ['rb-y', 'rbY', N2, FLT],
@@ -376,7 +304,6 @@
 
   function buildFieldPickers() {
     syncProceduralVisibility();
-    buildFritzoidControls();
     buildRibbonControls();
     var wrap = el('field-controls');
     if (!wrap) return;
@@ -805,8 +732,8 @@
     // an image when the user chose light text.
     var darkText = State.bgLoopId || State.bgVideoFile || (State.bgImage && State.bgImage.ink === 'light');
     if (darkText) { opts.theme = 'dark'; slots.theme = 'dark'; }
-    // Fritz Field design choices ride motion as style-specific passthrough fields (the same mechanism
-    // fritzoid's tileBase/inkAlpha use), so expand() needs no per-style knowledge.
+    // Fritz Field design choices ride motion as style-specific passthrough fields, so expand() needs
+    // no per-style knowledge.
     var spec = safeExpand(State.templateName, slots, opts);
     if (State.style === 'fritzfield') {
       spec.motion.pattern = State.pattern;
@@ -814,18 +741,6 @@
       spec.motion.animate = State.animate;
       // Explicit user choice — set AFTER expand so it wins over the preset's own `cell`.
       spec.motion.cell = State.fieldCell;
-    }
-    if (State.style === 'fritzoid') {
-      spec.motion.marks = State.fzMarks;
-      spec.motion.markSize = State.fzSize;
-      spec.motion.slices = State.fzSlices;
-      spec.motion.steps = State.fzSteps;
-      spec.motion.chip = State.fzChip;
-      spec.motion.inkAlpha = State.fzInk;
-      spec.motion.palette = State.fzPalette;
-      spec.motion.fill = State.fzFill;
-      spec.motion.fillTarget = State.fzTarget;
-      spec.motion.fillPattern = State.fzPattern;
     }
     if (State.style === 'ribbon') {
       spec.motion.ribbons = State.rbCount;
