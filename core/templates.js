@@ -13,10 +13,10 @@
 (function (root) {
   'use strict';
 
-  var TEMPLATE_NAMES = ['new-hire', 'carousel', 'quote', 'hot-take', 'event'];
+  var TEMPLATE_NAMES = ['new-hire', 'carousel', 'quote', 'hot-take'];
   var LABELS = {
     'new-hire': 'New Hire', 'carousel': 'Carousel', 'quote': 'Quote',
-    'hot-take': 'Hot Take', 'event': 'Event',
+    'hot-take': 'Hot Take',
   };
 
   // brand-rules stub — the only export imported is ON_TOKEN_HEX (an allowlist Set); text-palette.cjs

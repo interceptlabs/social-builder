@@ -24,7 +24,6 @@
     'quote': ['quote', 'attribution', 'role'],
     'carousel': ['beats'],
     'hot-take': ['statement'],
-    'event': ['title', 'date', 'cta'],
   };
   function isTextSlot(template, key) { return (TEXT_SLOTS[template] || []).indexOf(key) !== -1; }
 
@@ -77,6 +76,7 @@
     bgVideoFile: null,    // { url, name } for a USER-UPLOADED loop (vs bgLoopId = a bundled one)
     photoOriginal: null,  // last uploaded photo (data URL), pre-matting
     matteOn: false,       // remove-background toggle for photo templates
+    noPhoto: false,       // explicit "no photo at all" — omits the photo layer entirely
     spec: null,
     images: null,
     composer: null,
@@ -470,6 +470,7 @@
       if (f.key === 'photo') {
         var file = document.createElement('input');
         file.type = 'file'; file.accept = 'image/*';
+        file.disabled = State.noPhoto;
         file.addEventListener('change', function () {
           var fl = file.files && file.files[0];
           if (!fl) return;
@@ -481,10 +482,26 @@
         var toggleRow = document.createElement('label');
         toggleRow.className = 'matte-toggle';
         var cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = State.matteOn;
+        cb.disabled = State.noPhoto;
         cb.addEventListener('change', function () { State.matteOn = cb.checked; applyPhoto(); });
         toggleRow.appendChild(cb);
         toggleRow.appendChild(document.createTextNode(' Remove background (person cutout)'));
         field.appendChild(toggleRow);
+        // "No photo" is an explicit choice — distinct from "haven't uploaded one yet," which keeps
+        // the template's placeholder showing. Checking it drops the photo layer entirely (buildSlots
+        // sends slots.photo:null; expand() omits the layer); unchecking falls back to the placeholder.
+        var noPhotoRow = document.createElement('label');
+        noPhotoRow.className = 'matte-toggle';
+        var noPhotoCb = document.createElement('input'); noPhotoCb.type = 'checkbox'; noPhotoCb.checked = State.noPhoto;
+        noPhotoCb.addEventListener('change', function () {
+          State.noPhoto = noPhotoCb.checked;
+          file.disabled = State.noPhoto; cb.disabled = State.noPhoto;
+          if (State.noPhoto) { State.photoOriginal = null; if (el('photo-status')) el('photo-status').textContent = ''; }
+          refresh();
+        });
+        noPhotoRow.appendChild(noPhotoCb);
+        noPhotoRow.appendChild(document.createTextNode(' No photo'));
+        field.appendChild(noPhotoRow);
         var pstatus = document.createElement('div');
         pstatus.className = 'file-btn'; pstatus.id = 'photo-status';
         field.appendChild(pstatus);
@@ -728,6 +745,7 @@
     State.colors = {};
     State.sizes = {};
     State.photoOriginal = null;
+    State.noPhoto = false;
     State.matteOn = false;
     // A different template has a different timing SHAPE (odometer vs wordReveal vs beatCycle vs pulse),
     // so drop the per-move overrides — a stale one must not ride onto the new template. loopSec is
@@ -753,7 +771,8 @@
       else slots[f.key] = v;
     });
     slots.ground = State.ground;
-    if (State.content.photo) slots.photo = State.content.photo;
+    if (State.noPhoto) slots.photo = null;
+    else if (State.content.photo) slots.photo = State.content.photo;
     // Advanced controls -> the exact content-JSON contract plates.html applyTextControls reads.
     var colors = {}, sizes = {};
     Object.keys(State.colors).forEach(function (k) { if (State.colors[k]) colors[k] = State.colors[k]; });
@@ -948,7 +967,7 @@
     State.content = cloneJSON(frame.content);
     State.colors = cloneJSON(frame.colors || {});
     State.sizes = cloneJSON(frame.sizes || {});
-    State.photoOriginal = null; State.matteOn = false;
+    State.photoOriginal = null; State.matteOn = false; State.noPhoto = false;
     State.editingFrameIndex = i;
     buildTemplatePicker();
     buildContentFields();
@@ -977,7 +996,7 @@
   // ---- transitions (timing) --------------------------------------------------------------------
   //
   // Per-template loop-safe TIMING sliders: loop duration for every template, plus the per-move timing
-  // the current spec actually carries (stat odometer, quote wordReveal, carousel beatCycle, event
+  // the current spec actually carries (quote wordReveal, carousel beatCycle,
   // pulse). Every slider is CLAMPED to the loop-safe range from the composition-spec contract, read
   // against the LIVE spec's N, so a seam-breaking value can't be produced. Timing does NOT change the
   // captured plates — the composer reads these fields live — so a change mutates State.spec and
@@ -1102,12 +1121,12 @@
       var cta = null, date = null;
       spec.pulse.members.forEach(function (m) { if (m.name === 'cta') cta = m; if (m.name === 'date') date = m; });
       if (cta) {
-        list.push({ id: 'tr-cta-amp', label: 'Event — CTA pulse amount', min: 0, max: 0.3, step: 0.01, value: cta.scaleAmp != null ? cta.scaleAmp : 0.05, kind: 'pulse', member: 'cta', field: 'scaleAmp' });
-        list.push({ id: 'tr-cta-harm', label: 'Event — CTA pulses / loop', min: 1, max: 6, step: 1, value: cta.harmonic != null ? cta.harmonic : 2, kind: 'pulse', member: 'cta', field: 'harmonic' });
+        list.push({ id: 'tr-cta-amp', label: 'CTA pulse amount', min: 0, max: 0.3, step: 0.01, value: cta.scaleAmp != null ? cta.scaleAmp : 0.05, kind: 'pulse', member: 'cta', field: 'scaleAmp' });
+        list.push({ id: 'tr-cta-harm', label: 'CTA pulses / loop', min: 1, max: 6, step: 1, value: cta.harmonic != null ? cta.harmonic : 2, kind: 'pulse', member: 'cta', field: 'harmonic' });
       }
       if (date) {
-        list.push({ id: 'tr-date-drift', label: 'Event — date tick', min: 0, max: 24, step: 1, value: date.driftY != null ? date.driftY : 6, kind: 'pulse', member: 'date', field: 'driftY' });
-        list.push({ id: 'tr-date-harm', label: 'Event — date ticks / loop', min: 1, max: 6, step: 1, value: date.harmonic != null ? date.harmonic : 3, kind: 'pulse', member: 'date', field: 'harmonic' });
+        list.push({ id: 'tr-date-drift', label: 'Date tick', min: 0, max: 24, step: 1, value: date.driftY != null ? date.driftY : 6, kind: 'pulse', member: 'date', field: 'driftY' });
+        list.push({ id: 'tr-date-harm', label: 'Date ticks / loop', min: 1, max: 6, step: 1, value: date.harmonic != null ? date.harmonic : 3, kind: 'pulse', member: 'date', field: 'harmonic' });
       }
     }
     return list;

@@ -392,7 +392,7 @@
     return shoulder(Math.abs(d), dwell);
   }
 
-  // Loop-safe CTA-pulse + date-ticker transform (Phase 12, NEWT-04 — the Event template). Returns the
+  // Loop-safe CTA-pulse + date-ticker transform (Phase 12, NEWT-04, originally the Event template's — kept as a generic primitive). Returns the
   // identity { scale: 1, dx: 0, dy: 0 } (byte-transparent) when spec.pulse is absent, when layerIndex
   // isn't a pulse.members[].name, AND — by the endpoint-zero forms below — at tN=0 and tN=1. For a
   // member, reads { scaleAmp, driftX, driftY, harmonic } (PULSE_DEFAULTS fill omitted fields; harmonic

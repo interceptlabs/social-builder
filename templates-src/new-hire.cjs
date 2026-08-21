@@ -4,11 +4,22 @@
  * stage-in-from-blank entrance timings are RETIRED as of this plan.
  *
  * Slot -> layer mapping (stable contract for Phase 5 content wiring + Phase 7 builder fields):
- *   greeting -> layers greeting-1 + greeting-2 (two display lines; shipped g1/g2)
- *   photo    -> layer photo   (hero cutout)
+ *   greeting -> layer greeting (single line, wraps naturally at the current scale — an explicit
+ *               \n still forces a hard break, same convention as every other text slot)
+ *   photo    -> layer photo   (hero cutout; OMITTED entirely from spec.layers when
+ *               slots.photo === null — an explicit "no photo" choice, not merely an un-set field)
  *   lockup   -> layer lockup  (canonical 8-path centered mark)
  *   name     -> layer name
  *   role     -> layer role
+ *
+ * greeting was originally two independently-authored display lines (greeting-1/greeting-2, each
+ * its own plate) — retired 2026-08 because a user who only filled in one line still saw the
+ * OTHER line's placeholder text (nothing ever cleared it). Collapsed to a single free-text slot
+ * that wraps under the same scale-down-then-wrap fit pass every other text slot already used
+ * (templates/new-hire/plates.html's fit()) — "one line, wrapping only if the content or scale
+ * genuinely needs it," with no second field to leave stale. The old greeting-1.png/greeting-2.png
+ * plates remain on disk, referenced only by the frozen legacy-regression fixture
+ * (scripts/fixtures/legacy-specs/new-hire-spec.json) — never delete them.
  *
  * Loop-first model (LOOP-04): every layer is present and fully composed at frame 0 — New Hire's
  * plates are non-overlapping (photo/lockup/copy each occupy their own region), so "all layers
@@ -27,7 +38,7 @@
 const { RATIOS, RATIO_KEYS } = require('../ratios.js');
 
 const defaults = {
-  greeting: ['Welcome to', 'the team.'],
+  greeting: 'Welcome to the team.',
   name: 'Jeff Lewis',
   role: 'Head of Client Advisory',
   photo: 'assets/photo-placeholder.png',
@@ -73,20 +84,27 @@ function expand(slots, opts) {
   const motion = style === 'keyline'
     ? { engine: 'keyline', style, preset, speed: { loopSec } }
     : { style, preset, speed: { loopSec } };
+  // An explicit slots.photo === null is "no photo" — the layer is OMITTED entirely rather than
+  // pointed at the placeholder, so nothing is captured/composited/exported for it. Any other value
+  // (a real path, or the field simply absent) keeps today's behavior exactly: the photo layer is
+  // always present and defaults to the placeholder asset.
+  const layers = [];
+  if (!(slots && slots.photo === null)) {
+    layers.push({ name: 'photo', plate: 'photo.png', float: Object.assign({}, ZERO_FLOAT) });
+  }
+  layers.push(
+    { name: 'lockup', plate: 'lockup.png', float: Object.assign({}, ZERO_FLOAT) },
+    { name: 'greeting', plate: 'greeting.png', float: Object.assign({}, ZERO_FLOAT) },
+    { name: 'name', plate: 'name.png', float: Object.assign({}, ZERO_FLOAT) },
+    { name: 'role', plate: 'role.png', float: Object.assign({}, ZERO_FLOAT) },
+  );
   const spec = {
     size: { w: RATIOS[ratio].w, h: RATIOS[ratio].h },
     fps: 30,
     dur: loopSec, // dur == loopSec so the clip covers exactly one bg loop
     bg: ground,
     motion,
-    layers: [
-      { name: 'photo', plate: 'photo.png', float: Object.assign({}, ZERO_FLOAT) },
-      { name: 'lockup', plate: 'lockup.png', float: Object.assign({}, ZERO_FLOAT) },
-      { name: 'greeting-1', plate: 'greeting-1.png', float: Object.assign({}, ZERO_FLOAT) },
-      { name: 'greeting-2', plate: 'greeting-2.png', float: Object.assign({}, ZERO_FLOAT) },
-      { name: 'name', plate: 'name.png', float: Object.assign({}, ZERO_FLOAT) },
-      { name: 'role', plate: 'role.png', float: Object.assign({}, ZERO_FLOAT) },
-    ],
+    layers,
     out: { codec: 'h264', crf: 18 },
     template: 'new-hire',
     slots,
