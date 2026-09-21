@@ -62,6 +62,18 @@
   .quote{font-family:var(--font-display);font-weight:700;font-size:82px;line-height:1.07;
     letter-spacing:-0.03em;color:var(--carbon-500);margin:0;}
   .attribution-block{position:absolute;left:96px;right:96px;bottom:96px;}
+  /* PORTRAIT (additive, optional) — a headshot beside the attribution, which is where a pull quote
+     conventionally carries one. The alternative the builder used to offer was the photo as a
+     full-bleed background, and on a real headshot that is not a layout: the quote runs across the
+     subject's face and the attribution disappears into their jacket. Here the quote keeps its whole
+     band and the photo identifies the speaker, which is the job it was doing anyway.
+     Every rule below is scoped to html.has-portrait, added by the injector ONLY when content.photo
+     is a non-empty string — with no photo the base CSS above is untouched and the default capture
+     stays byte-identical. */
+  html.has-portrait .attribution-block{display:flex;align-items:center;gap:28px;}
+  html.has-portrait .attribution-text{min-width:0;}
+  .portrait{flex:0 0 auto;width:120px;height:120px;border-radius:50%;object-fit:cover;
+    object-position:50% 22%;display:block;}
   .attribution{font-family:var(--font-display);font-weight:700;font-size:36px;line-height:1.05;
     letter-spacing:-0.02em;color:var(--flarepop-100);margin:0;}
   .role{font-family:var(--font-body);font-weight:500;font-size:26px;line-height:1.3;
@@ -77,6 +89,7 @@
   html.ratio-4x5 .quote{font-size:92px;}
   html.ratio-4x5 .attribution{font-size:40px;}
   html.ratio-4x5 .role{font-size:29px;}
+  html.ratio-4x5 .portrait{width:132px;height:132px;}
 
   /* 9x16 (1080x1920) — portrait; the biggest display treatment, more headroom. */
   html.ratio-9x16 body,html.ratio-9x16 .frame{width:1080px;height:1920px;}
@@ -85,6 +98,7 @@
   html.ratio-9x16 .quote{font-size:104px;line-height:1.09;}
   html.ratio-9x16 .attribution{font-size:44px;}
   html.ratio-9x16 .role{font-size:31px;}
+  html.ratio-9x16 .portrait{width:144px;height:144px;}
 
   /* 16x9 (1920x1080) — wide; the quote reads as a LEFT pull-quote (band constrained to ~58% width),
      never a center-stretched square. */
@@ -95,6 +109,7 @@
   html.ratio-16x9 .attribution-block{left:112px;right:820px;}
   html.ratio-16x9 .attribution{font-size:36px;}
   html.ratio-16x9 .role{font-size:27px;}
+  html.ratio-16x9 .portrait{width:112px;height:112px;}
 
   /* Ground ink flip + lockup override (SLOT-02/SLOT-04) — appended, base CSS above untouched.
      ground=halo (default, no class added) keeps dark quote + attribution/role on light. html.ground-
@@ -245,23 +260,62 @@
     if (content.quote != null) {
       while (quoteEl.firstChild) quoteEl.removeChild(quoteEl.firstChild);
       var parts = String(content.quote).trim().split(/(\s+)/); // [word, sep, word, sep, ..., word]
-      var words = [], breakBefore = [];
+      // COUNT the returns in each separator rather than recording a boolean. One Enter is one <br>
+      // (byte-identical to the previous behaviour); pressing Enter TWICE used to collapse to that
+      // same single <br>, so an author who left a blank line between two sentences got no blank line
+      // in the asset — and where their break happened to fall where the text already wrapped, the
+      // return looked like it had done nothing at all. The attribution and role slots have always
+      // honoured a blank line (setText splits on every \n, so the empty string between two returns
+      // becomes its own empty line); the quote collapsing them was the odd one out.
+      // Capped at 2: one blank line is a paragraph gap, more is only starving the type, and the fit
+      // pass would answer a longer run by shrinking the quote toward its floor.
+      var words = [], breaksBefore = [];
       for (var pi = 0; pi < parts.length; pi++) {
         if (pi % 2 !== 0) continue;              // odd indices are separators
         if (parts[pi] === '') continue;          // trimmed edges never contribute an empty word
         words.push(parts[pi]);
-        breakBefore.push(pi > 0 && parts[pi - 1].indexOf('\n') !== -1);
+        breaksBefore.push(pi > 0 ? Math.min(2, (parts[pi - 1].match(/\n/g) || []).length) : 0);
       }
       var curLine = null;
       words.forEach(function (w, i) {
-        if (i > 0) quoteEl.appendChild(breakBefore[i] ? document.createElement('br') : document.createTextNode(' '));
+        if (i > 0) {
+          var nBreaks = breaksBefore[i];
+          if (!nBreaks) quoteEl.appendChild(document.createTextNode(' '));
+          else for (var b = 0; b < nBreaks; b++) quoteEl.appendChild(document.createElement('br'));
+        }
         var span = document.createElement('span');
         span.setAttribute('data-plate', 'word-' + (i + 1));
         span.appendChild(document.createTextNode(w));
         quoteEl.appendChild(span);
-        if (i === 0 || breakBefore[i]) { curLine = []; quoteLineGroups.push(curLine); } // a \n starts a new line group
+        // A line GROUP is a run of words, so a blank line adds no group — per-line colours index the
+        // lines that actually carry type, which is the only thing a colour can be applied to.
+        if (i === 0 || breaksBefore[i]) { curLine = []; quoteLineGroups.push(curLine); }
         curLine.push(span);
       });
+    }
+    // PORTRAIT (additive) — a non-empty content.photo puts a headshot beside the attribution. The
+    // two <p>s move into a wrapper so the block can lay out as [ portrait | name+role ]; absent a
+    // photo NOTHING here runs and the DOM is exactly what it was.
+    // `photoPresent` is the static builder's flag for "a photo was uploaded, but its data-URL was
+    // stripped from this query to keep it short" — the real bitmap is painted into this box by the
+    // renderer. A 1x1 transparent stand-in keeps the <img> valid meanwhile; the box is a fixed
+    // 120px square, so nothing here depends on the stand-in's intrinsic size.
+    var TRANSPARENT_PX = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+    var photoSrc = (typeof content.photo === 'string' && content.photo) ? content.photo
+      : (content.photoPresent ? TRANSPARENT_PX : '');
+    if (photoSrc) {
+      var block = document.querySelector('.attribution-block');
+      var textWrap = document.createElement('div');
+      textWrap.className = 'attribution-text';
+      while (block.firstChild) textWrap.appendChild(block.firstChild);
+      var portrait = document.createElement('img');
+      portrait.className = 'portrait';
+      portrait.setAttribute('data-plate', 'portrait');
+      portrait.setAttribute('alt', '');
+      portrait.src = photoSrc;
+      block.appendChild(portrait);
+      block.appendChild(textWrap);
+      document.documentElement.classList.add('has-portrait');
     }
     var attrEl = document.querySelector('[data-plate="attribution"]');
     var roleEl = document.querySelector('[data-plate="role"]');

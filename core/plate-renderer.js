@@ -41,6 +41,12 @@
     var contentSlots = slots;
     if (typeof slots.photo === 'string' && slots.photo.slice(0, 5) === 'data:') {
       contentSlots = Object.assign({}, slots); delete contentSlots.photo;
+      // KEEP THE FACT of the photo even though its bytes are stripped. New Hire never needed this —
+      // its placeholder <img> is in the shipped markup, so deleting the key only changes which
+      // pixels get painted over it. Quote's portrait is different: the injector CREATES the element
+      // only when a photo exists, so a stripped key meant no element, no plate, and an upload that
+      // silently did nothing. A template that builds its photo box conditionally reads this flag.
+      contentSlots.photoPresent = true;
     }
     // Pre-encode the JSON before handing it to URLSearchParams — the shared plates.html injector reads
     // `?content=` and runs `decodeURIComponent(URLSearchParams.get('content'))`, i.e. it expects the

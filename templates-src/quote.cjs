@@ -34,6 +34,13 @@ const defaults = {
   quote: 'Intercept gave every campaign one clear source of truth.',
   attribution: 'Dana Whitfield',
   role: 'VP Marketing, Northwind Labs',
+  // EMPTY on purpose. The builder derives its content fields from this object, so declaring `photo`
+  // here is what puts the upload control on the Quote panel — but the value has to stay empty, since
+  // both the portrait layer (below) and the plates.html injector require a NON-EMPTY string. An
+  // un-set photo therefore changes nothing: same layers, same plates, same bytes as before the
+  // portrait existed. buildSlots never seeds this default into content either (app.js skips the
+  // photo key), so it only ever becomes non-empty when someone actually uploads a headshot.
+  photo: '',
   lockup: 'centered',
 };
 
@@ -111,6 +118,13 @@ function expand(slots, opts) {
   }
   layers.push({ name: 'attribution', plate: 'attribution.png', float: Object.assign({}, ZERO_FLOAT) });
   layers.push({ name: 'role', plate: 'role.png', float: Object.assign({}, ZERO_FLOAT) });
+  // PORTRAIT (additive, optional) — only when slots.photo is a non-empty string, matching the
+  // plates.html injector, which draws the headshot beside the attribution only under that same
+  // condition. No photo => no layer and no plate, so every existing quote spec is byte-identical.
+  // Not a wordReveal member: the speaker's face is present at every frame, like the lockup.
+  if (slots && typeof slots.photo === 'string' && slots.photo) {
+    layers.push({ name: 'portrait', plate: 'portrait.png', float: Object.assign({}, ZERO_FLOAT) });
+  }
   layers.push({ name: 'lockup', plate: 'lockup.png', float: Object.assign({}, ZERO_FLOAT) });
 
   // spec.wordReveal drives 11-01's wordRevealAlpha over EXACTLY the quote words (word-1..word-N in
